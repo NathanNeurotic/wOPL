@@ -11,14 +11,21 @@
 #include "include/system.h"
 #include "include/extern_irx.h"
 #include "include/cheatman.h"
+#include "include/art_tar.h"
 #include "modules/iopcore/common/cdvd_config.h"
 #include <ps2smb.h>
 #include <ps2ips.h>
+#include <tcpip.h>
 #include <netman.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <kernel.h>
 #include <errno.h>
+#include <smb2/smb2.h>
+#include <smb2/libsmb2.h>
+#include <arpa/inet.h>
+#include "modules/network/usmb2/usmb2.h"
+#include "modules/network/libsmb2/lib/ps2/ps2smb2.h"
 
 #define NEWLIB_PORT_AWARE
 #include <fileXio_rpc.h> // fileXioDevctl(ethBase, SMB_***)
@@ -28,6 +35,7 @@
 #define ETH_MODE_UPDATE_DELAY 300
 
 #include "include/mcemu.h"
+
 typedef struct
 {
     int active;       /* Activation flag */
@@ -46,9 +54,14 @@ static int ethGameCount = 0;
 static unsigned char ethModulesLoaded = 0;
 static base_game_info_t *ethGames = NULL;
 
+struct usmb2_context *usmb2;
+
 static struct ip4_addr lastIP;
 static struct ip4_addr lastNM;
 static struct ip4_addr lastGW;
+
+struct usmb2_context *gUSMB2;
+struct smb2_context *gSMB2;
 
 // forward declaration
 static item_list_t ethGameList;
@@ -58,6 +71,8 @@ static int ethGetNetIFLinkStatus(void);
 static int ethApplyNetIFConfig(void);
 static int ethApplyIPConfig(void);
 static int ethReadNetConfig(void);
+
+static void smbLoadModules(void);
 
 static int ethInitSemaID = -1;
 
@@ -77,85 +92,133 @@ static void ethSMBConnect(void)
     unsigned char share_ip_address[4];
     smbLogOn_in_t logon;
     smbEcho_in_t echo;
+    smb2Connect_in_t connect_in;
+    smb2Connect_out_t connect_out;
     smbOpenShare_in_t openshare;
+    struct smb2_url *parsed_url; // Parse the share url
     int result;
+    char url[256];
 
     if (gETHPrefix[0] != '\0')
         sprintf(ethPrefix, "%s%s\\", ethBase, gETHPrefix);
     else
         strcpy(ethPrefix, ethBase);
 
-    // open tcp connection with the server / logon to SMB server
-    if (gPCShareAddressIsNetBIOS) {
-        if (nbnsFindName(gPCShareNBAddress, share_ip_address) != 0) {
-            gNetworkStartup = ERROR_ETH_SMB_CONN;
-            return;
+    if (gEnableSMB2) {
+        LOG("ETHSUPPORT Init SMB2/SMB3\n");
+
+        gSMB2 = smb2_init_context();
+
+        guiRenderTextScreen("Criacao do contexto smb2");
+
+
+        // open tcp connection with the server / logon to SMB server
+        if (gPCShareAddressIsNetBIOS) {
+            if (nbnsFindName(gPCShareNBAddress, share_ip_address) != 0) {
+                gNetworkStartup = ERROR_ETH_SMB_CONN;
+                return;
+            }
+
+            snprintf(url, sizeof(url), "smb://%u.%u.%u.%u", share_ip_address[0], share_ip_address[1], share_ip_address[2], share_ip_address[3]); // Ip adress should be in backslash four times
+        } else {
+            snprintf(url, sizeof(url), "smb://%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
         }
 
-        sprintf(logon.serverIP, "%u.%u.%u.%u", share_ip_address[0], share_ip_address[1], share_ip_address[2], share_ip_address[3]);
+
     } else {
-        sprintf(logon.serverIP, "%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
+        // open tcp connection with the server / logon to SMB server
+        if (gPCShareAddressIsNetBIOS) {
+            if (nbnsFindName(gPCShareNBAddress, share_ip_address) != 0) {
+                gNetworkStartup = ERROR_ETH_SMB_CONN;
+                return;
+            }
+
+            snprintf(logon.serverIP, sizeof(logon.serverIP), "%u.%u.%u.%u:%d", share_ip_address[0], share_ip_address[1], share_ip_address[2], share_ip_address[3], gPCPort);
+        } else {
+            snprintf(logon.serverIP, sizeof(logon.serverIP), "%u.%u.%u.%u:%d", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3], gPCPort);
+        }
     }
 
     logon.serverPort = gPCPort;
 
-    if (strlen(gPCPassword) > 0) {
-        smbGetPasswordHashes_in_t passwd;
-        smbGetPasswordHashes_out_t passwdhashes;
-
-        // we'll try to generate hashed password first
-        strncpy(logon.User, gPCUserName, sizeof(logon.User));
-        strncpy(passwd.password, gPCPassword, sizeof(passwd.password));
-
-        if (fileXioDevctl(ethBase, SMB_DEVCTL_GETPASSWORDHASHES, (void *)&passwd, sizeof(passwd), (void *)&passwdhashes, sizeof(passwdhashes)) == 0) {
-            // hash generated okay, can use
-            memcpy((void *)logon.Password, (void *)&passwdhashes, sizeof(passwdhashes));
-            logon.PasswordType = HASHED_PASSWORD;
-            memcpy((void *)openshare.Password, (void *)&passwdhashes, sizeof(passwdhashes));
-            openshare.PasswordType = HASHED_PASSWORD;
-        } else {
-            // failed hashing, failback to plaintext
-            strncpy(logon.Password, gPCPassword, sizeof(logon.Password));
-            logon.PasswordType = PLAINTEXT_PASSWORD;
-            strncpy(openshare.Password, gPCPassword, sizeof(openshare.Password));
-            openshare.PasswordType = PLAINTEXT_PASSWORD;
-        }
+    if (gEnableSMB2) {
+        strcpy(connect_in.name, gPCShareName);
+        strcpy(connect_in.username, gPCUserName);
+        strcpy(connect_in.password, gPCPassword);
+        strcpy(connect_in.url, url);
+        smb2_set_user(gSMB2, connect_in.username);
+        smb2_set_password(gSMB2, connect_in.password);
     } else {
-        strncpy(logon.User, gPCUserName, sizeof(logon.User));
-        logon.PasswordType = NO_PASSWORD;
-        openshare.PasswordType = NO_PASSWORD;
-    }
 
-    if ((result = fileXioDevctl(ethBase, SMB_DEVCTL_LOGON, (void *)&logon, sizeof(logon), NULL, 0)) >= 0) {
-        // SMB server alive test
-        strcpy(echo.echo, "ALIVE ECHO TEST");
-        echo.len = strlen("ALIVE ECHO TEST");
+        if (strlen(gPCPassword) > 0) {
+            smbGetPasswordHashes_in_t passwd;
+            smbGetPasswordHashes_out_t passwdhashes;
 
-        if (gPCShareAddressIsNetBIOS) {
-            // Since the SMB server can be connected to, update the IP address.
-            pc_ip[0] = share_ip_address[0];
-            pc_ip[1] = share_ip_address[1];
-            pc_ip[2] = share_ip_address[2];
-            pc_ip[3] = share_ip_address[3];
-        }
+            // we'll try to generate hashed password first
+            strncpy(logon.User, gPCUserName, sizeof(logon.User));
+            strncpy(passwd.password, gPCPassword, sizeof(passwd.password));
 
-        if (fileXioDevctl(ethBase, SMB_DEVCTL_ECHO, (void *)&echo, sizeof(echo), NULL, 0) >= 0) {
-            gNetworkStartup = ERROR_ETH_SMB_OPENSHARE;
-
-            if (gPCShareName[0]) {
-                // connect to the share
-                strcpy(openshare.ShareName, gPCShareName);
-
-                if (fileXioDevctl(ethBase, SMB_DEVCTL_OPENSHARE, (void *)&openshare, sizeof(openshare), NULL, 0) >= 0) {
-                    // everything is ok
-                    gNetworkStartup = 0;
-                }
+            if (fileXioDevctl(ethBase, SMB_DEVCTL_GETPASSWORDHASHES, (void *)&passwd, sizeof(passwd), (void *)&passwdhashes, sizeof(passwdhashes)) == 0) {
+                // hash generated okay, can use
+                memcpy((void *)logon.Password, (void *)&passwdhashes, sizeof(passwdhashes));
+                logon.PasswordType = HASHED_PASSWORD;
+                memcpy((void *)openshare.Password, (void *)&passwdhashes, sizeof(passwdhashes));
+                openshare.PasswordType = HASHED_PASSWORD;
+            } else {
+                // failed hashing, failback to plaintext
+                strncpy(logon.Password, gPCPassword, sizeof(logon.Password));
+                logon.PasswordType = PLAINTEXT_PASSWORD;
+                strncpy(openshare.Password, gPCPassword, sizeof(openshare.Password));
+                openshare.PasswordType = PLAINTEXT_PASSWORD;
             }
         } else {
-            gNetworkStartup = ERROR_ETH_SMB_ECHO;
+            strncpy(logon.User, gPCUserName, sizeof(logon.User));
+            logon.PasswordType = NO_PASSWORD;
+            openshare.PasswordType = NO_PASSWORD;
         }
+    }
+
+    if (gEnableSMB2) {
+        parsed_url = smb2_parse_url(gSMB2, connect_in.url);
+
+        if (url == NULL) {
+            gNetworkStartup = ERROR_ETH_SMB_LOGON;
+            return;
+        }
+
     } else {
-        gNetworkStartup = (result == -SMB_DEVCTL_LOGON_ERR_CONN) ? ERROR_ETH_SMB_CONN : ERROR_ETH_SMB_LOGON;
+
+        if ((result = fileXioDevctl(ethBase, SMB_DEVCTL_LOGON, (void *)&logon, sizeof(logon), NULL, 0)) >= 0) {
+            // SMB server alive test
+            strcpy(echo.echo, "ALIVE ECHO TEST");
+            echo.len = strlen("ALIVE ECHO TEST");
+
+            if (gPCShareAddressIsNetBIOS) {
+                // Since the SMB server can be connected to, update the IP address.
+                pc_ip[0] = share_ip_address[0];
+                pc_ip[1] = share_ip_address[1];
+                pc_ip[2] = share_ip_address[2];
+                pc_ip[3] = share_ip_address[3];
+            }
+
+            if (fileXioDevctl(ethBase, SMB_DEVCTL_ECHO, (void *)&echo, sizeof(echo), NULL, 0) >= 0) {
+                gNetworkStartup = ERROR_ETH_SMB_OPENSHARE;
+
+                if (gPCShareName[0]) {
+                    // connect to the share
+                    strcpy(openshare.ShareName, gPCShareName);
+
+                    if (fileXioDevctl(ethBase, SMB_DEVCTL_OPENSHARE, (void *)&openshare, sizeof(openshare), NULL, 0) >= 0) {
+                        // everything is ok
+                        gNetworkStartup = 0;
+                    }
+                }
+            } else {
+                gNetworkStartup = ERROR_ETH_SMB_ECHO;
+            }
+        } else {
+            gNetworkStartup = (result == -SMB_DEVCTL_LOGON_ERR_CONN) ? ERROR_ETH_SMB_CONN : ERROR_ETH_SMB_LOGON;
+        }
     }
 }
 
@@ -163,15 +226,22 @@ static int ethSMBDisconnect(void)
 {
     int ret;
 
-    // closing share
-    ret = fileXioDevctl(ethBase, SMB_DEVCTL_CLOSESHARE, NULL, 0, NULL, 0);
-    if (ret < 0)
-        return -1;
+    if (gEnableSMB2) {
+        // For SMB2, we use a different disconnect command
+        int ret = fileXioDevctl(ethBase, SMB2_DEVCTL_DISCONNECT_ALL, NULL, 0, NULL, 0);
+        if (ret < 0)
+            return -1;
+    } else {
+        // closing share
+        ret = fileXioDevctl(ethBase, SMB_DEVCTL_CLOSESHARE, NULL, 0, NULL, 0);
+        if (ret < 0)
+            return -1;
 
-    // logoff/close tcp connection from SMB server:
-    ret = fileXioDevctl(ethBase, SMB_DEVCTL_LOGOFF, NULL, 0, NULL, 0);
-    if (ret < 0)
-        return -2;
+        // logoff/close tcp connection from SMB server:
+        ret = fileXioDevctl(ethBase, SMB_DEVCTL_LOGOFF, NULL, 0, NULL, 0);
+        if (ret < 0)
+            return -2;
+    }
 
     return 0;
 }
@@ -282,6 +352,11 @@ static void ethInitSMB(void)
         sprintf(path, "%sLNG", ethPrefix);
         lngAddLanguages(path, "\\", ethGameList.mode);
 
+        if (gEnableArchivedArt) {
+            sprintf(path, "%sART\\art.tar", ethPrefix);
+            loadTarFile(path);
+        }
+
         sbCreateFolders(ethPrefix, 1);
     } else if (gPCShareName[0] || !(gNetworkStartup >= ERROR_ETH_SMB_OPENSHARE)) {
         ethDisplayErrorStatus();
@@ -316,10 +391,10 @@ static int ethLoadModules(void)
                 }
             }
         }
-
-        gNetworkStartup = ERROR_ETH_MODULE_NETIF_FAILURE;
-        return -1;
     }
+
+    gNetworkStartup = ERROR_ETH_MODULE_NETIF_FAILURE;
+    return -1;
 
     return 0;
 }
@@ -411,16 +486,29 @@ static void smbLoadModules(void)
     SignalSema(ethInitSemaID);
 
     if (ret == 0) {
-        gNetworkStartup = ERROR_ETH_MODULE_SMBMAN_FAILURE;
-        LOG("[SMBMAN]:\n");
-        if (sysLoadModuleBuffer(&smbman_irx, size_smbman_irx, 0, NULL) >= 0) {
-            LOG("[NBNS]:\n");
-            sysLoadModuleBuffer(&nbns_irx, size_nbns_irx, 0, NULL);
-            nbnsInit();
+        if (gEnableSMB2 == 1) {
+            if (sysLoadModuleBuffer(&smb2man_irx, size_smb2man_irx, 0, NULL) >= 0) { //
+                // LOG("[USMB2]:\n"); // Figure out how to unload the usmb2 module for smb2man.
+                // sysLoadModuleBuffer(&usmb2_irx, size_usmb2_irx, 0, NULL);
+                LOG("[NBNS]:\n");
+                sysLoadModuleBuffer(&nbns_irx, size_nbns_irx, 0, NULL);
+                nbnsInit();
 
-            LOG("SMBSUPPORT Modules loaded\n");
-            ethInitSMB();
-            return;
+                ethInitSMB();
+                return;
+            }
+        } else {
+            gNetworkStartup = ERROR_ETH_MODULE_SMBMAN_FAILURE;
+            LOG("[SMBMAN]:\n");
+            if (sysLoadModuleBuffer(&smbman_irx, size_smbman_irx, 0, NULL) >= 0) {
+                LOG("[NBNS]:\n");
+                sysLoadModuleBuffer(&nbns_irx, size_nbns_irx, 0, NULL);
+                nbnsInit();
+
+                LOG("SMBSUPPORT SMB1 Modules loaded\n");
+                ethInitSMB();
+                return;
+            }
         }
     }
 
@@ -440,7 +528,11 @@ static void ethInit(item_list_t *itemList)
         ioPutRequest(IO_CUSTOM_SIMPLEACTION, &ethInitSMB);
     } else {
         LOG("ETHSUPPORT Init\n");
-        ethBase = "smb0:";
+        if (gEnableSMB2) {
+            ethBase = "smb:";
+        } else {
+            ethBase = "smb0:";
+        }
         ethULSizePrev = -2;
         ethModifiedCDPrev = 0;
         ethModifiedDVDPrev = 0;
@@ -497,47 +589,132 @@ static int ethNeedsUpdate(item_list_t *itemList)
     return result;
 }
 
-static int ethUpdateGameList(item_list_t *itemList)
+static void ethSMB2ListShares(void)
 {
+    // For SMB2, we don't have direct share listing support
+    // For now, just return the configured share if it exists
     if (gPCShareName[0]) {
-        if (gNetworkStartup != 0)
-            return 0;
-
-        if ((sbReadList(&ethGames, ethPrefix, &ethULSizePrev, &ethGameCount)) < 0) {
-            gNetworkStartup = ERROR_ETH_SMB_LISTGAMES;
-            ethDisplayErrorStatus();
+        free(ethGames);
+        ethGames = (base_game_info_t *)malloc(sizeof(base_game_info_t) * 1);
+        if (ethGames) {
+            base_game_info_t *g = &ethGames[0];
+            memcpy(g->name, gPCShareName, sizeof(g->name));
+            g->name[31] = '\0';
+            sprintf(g->startup, "SHARE");
+            g->extension[0] = '\0';
+            g->parts = 0x00;
+            g->media = 0x00;
+            g->format = GAME_FORMAT_USBLD;
+            g->sizeMB = 0;
+            ethGameCount = 1;
+        } else {
+            ethGameCount = 0;
         }
     } else {
-        int i, count;
-        ShareEntry_t sharelist[128];
-        smbGetShareList_in_t getsharelist;
+        // If no share is configured, try some common share names
+        const char *commonShares[] = {"games", "PS2SMB", "PS2SMB2", "share", "public"};
+        int numCommonShares = sizeof(commonShares) / sizeof(commonShares[0]);
+        int foundShares = 0;
 
-        if (gNetworkStartup < ERROR_ETH_SMB_OPENSHARE)
-            return 0;
+        free(ethGames);
+        ethGames = (base_game_info_t *)malloc(sizeof(base_game_info_t) * numCommonShares);
+        if (ethGames) {
+            for (int i = 0; i < numCommonShares; i++) {
+                // Try to connect to each common share
+                smb2Connect_in_t connect_in;
+                smb2Connect_out_t connect_out;
+                char url[256];
+                unsigned char share_ip_address[4];
 
-        getsharelist.EE_addr = (void *)&sharelist[0];
-        getsharelist.maxent = 128;
+                // Build SMB URL
+                if (gPCShareAddressIsNetBIOS) {
+                    if (nbnsFindName(gPCShareNBAddress, share_ip_address) != 0) {
+                        continue; // Skip if can't resolve NetBIOS name
+                    }
+                    sprintf(url, "smb:\\%u.%u.%u.%u\\%s", share_ip_address[0], share_ip_address[1], share_ip_address[2], share_ip_address[3], commonShares[i]);
+                } else {
+                    sprintf(url, "smb:\\%u.%u.%u.%u\\%s", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3], commonShares[i]);
+                }
 
-        count = fileXioDevctl(ethBase, SMB_DEVCTL_GETSHARELIST, (void *)&getsharelist, sizeof(getsharelist), NULL, 0);
-        if (count > 0) {
-            free(ethGames);
-            ethGames = (base_game_info_t *)malloc(sizeof(base_game_info_t) * count);
-            for (i = 0; i < count; i++) {
-                LOG("ETHSUPPORT Share found: %s\n", sharelist[i].ShareName);
-                base_game_info_t *g = &ethGames[i];
-                memcpy(g->name, sharelist[i].ShareName, sizeof(g->name));
-                g->name[31] = '\0';
-                sprintf(g->startup, "SHARE");
-                g->extension[0] = '\0';
-                g->parts = 0x00;
-                g->media = 0x00;
-                g->format = GAME_FORMAT_USBLD;
-                g->sizeMB = 0;
+                // Prepare connection parameters
+                strcpy(connect_in.name, commonShares[i]);
+                strcpy(connect_in.username, gPCUserName);
+                strcpy(connect_in.password, gPCPassword);
+                strcpy(connect_in.url, url);
+
+                // Try to connect to the share
+                if (fileXioDevctl(ethBase, SMB2_DEVCTL_CONNECT, (void *)&connect_in, sizeof(connect_in), (void *)&connect_out, sizeof(connect_out)) >= 0) {
+                    // Connection successful, add to list
+                    base_game_info_t *g = &ethGames[foundShares];
+                    strcpy(g->name, commonShares[i]);
+                    sprintf(g->startup, "SHARE");
+                    g->extension[0] = '\0';
+                    g->parts = 0x00;
+                    g->media = 0x00;
+                    g->format = GAME_FORMAT_USBLD;
+                    g->sizeMB = 0;
+                    foundShares++;
+
+                    // Disconnect immediately after testing
+                    fileXioDevctl(ethBase, SMB2_DEVCTL_DISCONNECT_ALL, NULL, 0, NULL, 0);
+                }
             }
-            ethGameCount = count;
-        } else if (count < 0) {
-            gNetworkStartup = ERROR_ETH_SMB_LISTSHARES;
-            ethDisplayErrorStatus();
+
+            if (foundShares == 0) {
+                free(ethGames);
+                ethGames = NULL;
+            }
+        }
+        ethGameCount = foundShares;
+    }
+}
+
+static int ethUpdateGameList(item_list_t *itemList)
+{
+    if (gEnableSMB2) {
+        // For SMB2, try to list common shares
+        ethSMB2ListShares();
+    } else {
+        if (gPCShareName[0]) {
+            if (gNetworkStartup != 0)
+                return 0;
+
+            if ((sbReadList(&ethGames, ethPrefix, &ethULSizePrev, &ethGameCount)) < 0) {
+                gNetworkStartup = ERROR_ETH_SMB_LISTGAMES;
+                ethDisplayErrorStatus();
+            }
+        } else {
+            int i, count;
+            ShareEntry_t sharelist[128];
+            smbGetShareList_in_t getsharelist;
+
+            if (gNetworkStartup < ERROR_ETH_SMB_OPENSHARE)
+                return 0;
+
+            getsharelist.EE_addr = (void *)&sharelist[0];
+            getsharelist.maxent = 128;
+
+            count = fileXioDevctl(ethBase, SMB_DEVCTL_GETSHARELIST, (void *)&getsharelist, sizeof(getsharelist), NULL, 0);
+            if (count > 0) {
+                free(ethGames);
+                ethGames = (base_game_info_t *)malloc(sizeof(base_game_info_t) * count);
+                for (i = 0; i < count; i++) {
+                    LOG("ETHSUPPORT Share found: %s\n", sharelist[i].ShareName);
+                    base_game_info_t *g = &ethGames[i];
+                    memcpy(g->name, sharelist[i].ShareName, sizeof(g->name));
+                    g->name[31] = '\0';
+                    sprintf(g->startup, "SHARE");
+                    g->extension[0] = '\0';
+                    g->parts = 0x00;
+                    g->media = 0x00;
+                    g->format = GAME_FORMAT_USBLD;
+                    g->sizeMB = 0;
+                }
+                ethGameCount = count;
+            } else if (count < 0) {
+                gNetworkStartup = ERROR_ETH_SMB_LISTSHARES;
+                ethDisplayErrorStatus();
+            }
         }
     }
     return ethGameCount;
@@ -579,7 +756,7 @@ static void ethDeleteGame(item_list_t *itemList, int id)
 
 static void ethRenameGame(item_list_t *itemList, int id, char *newName)
 {
-    sbRename(&ethGames, ethPrefix, "\\", ethGameCount, id, newName);
+    sbRenameList(&ethGames, ethPrefix, "\\", ethGameCount, id, newName);
     ethULSizePrev = -2;
 }
 
@@ -590,6 +767,7 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
     int result;
     char filename[32], partname[256];
     base_game_info_t *game = &ethGames[id];
+    struct cdvdman_settings_smb2 *settings_smb2_3;
     struct cdvdman_settings_smb *settings;
     u32 layer1_start, layer1_offset;
     unsigned short int layer1_part;
@@ -648,8 +826,11 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
         saveConfig(CONFIG_LAST, 0);
     }
 
-    compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
-
+    if (gEnableSMB2) {
+        compatmask = sbPrepare(game, configSet, size_smb2_3_cdvdman_irx, smb2_3_cdvdman_irx, &i);
+    } else {
+        compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
+    }
     if ((result = sbLoadCheats(ethPrefix, game->startup)) < 0) {
         switch (result) {
             case -ENOENT:
@@ -660,35 +841,56 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
         }
     }
 
-    settings = (struct cdvdman_settings_smb *)((u8 *)(&smb_cdvdman_irx) + i);
+    if (gEnableSMB2) {
+        settings_smb2_3 = (struct cdvdman_settings_smb2 *)((u8 *)(&smb2_3_cdvdman_irx) + i);
+        switch (game->format) {
+            case GAME_FORMAT_OLD_ISO:
+                snprintf(settings_smb2_3->filename, sizeof(settings_smb2_3->filename), "%s.%s%s", game->startup, game->name, game->extension);
+                break;
+            case GAME_FORMAT_ISO:
+                snprintf(settings_smb2_3->filename, sizeof(settings_smb2_3->filename), "%s%s", game->name, game->extension);
+                break;
+            default: // USBExtreme format.
+                snprintf(settings_smb2_3->filename, sizeof(settings_smb2_3->filename), "ul.%08X.%s", USBA_crc32(game->name), game->startup);
+                settings_smb2_3->common.flags |= IOPCORE_SMB_FORMAT_USBLD;
+        }
 
-    switch (game->format) {
-        case GAME_FORMAT_OLD_ISO:
-            snprintf(settings->filename, sizeof(settings->filename), "%s.%s%s", game->startup, game->name, game->extension);
-            break;
-        case GAME_FORMAT_ISO:
-            snprintf(settings->filename, sizeof(settings->filename), "%s%s", game->name, game->extension);
-            break;
-        default: // USBExtreme format.
-            snprintf(settings->filename, sizeof(settings->filename), "ul.%08X.%s", USBA_crc32(game->name), game->startup);
-            settings->common.flags |= IOPCORE_SMB_FORMAT_USBLD;
+        sprintf(settings_smb2_3->smb_ip, "%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
+        settings_smb2_3->smb_port = gPCPort;
+        strcpy(settings_smb2_3->smb_share, gPCShareName);
+        strcpy(settings_smb2_3->smb_prefix, gETHPrefix);
+        strcpy(settings_smb2_3->smb_user, gPCUserName);
+        strcpy(settings_smb2_3->smb_password, gPCPassword);
+    } else {
+        settings = (struct cdvdman_settings_smb *)((u8 *)(&smb_cdvdman_irx) + i);
+        switch (game->format) {
+            case GAME_FORMAT_OLD_ISO:
+                snprintf(settings->filename, sizeof(settings->filename), "%s.%s%s", game->startup, game->name, game->extension);
+                break;
+            case GAME_FORMAT_ISO:
+                snprintf(settings->filename, sizeof(settings->filename), "%s%s", game->name, game->extension);
+                break;
+            default: // USBExtreme format.
+                snprintf(settings->filename, sizeof(settings->filename), "ul.%08X.%s", USBA_crc32(game->name), game->startup);
+                settings->common.flags |= IOPCORE_SMB_FORMAT_USBLD;
+        }
+
+        sprintf(settings->smb_ip, "%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
+        settings->smb_port = gPCPort;
+        strcpy(settings->smb_share, gPCShareName);
+        strcpy(settings->smb_prefix, gETHPrefix);
+        strcpy(settings->smb_user, gPCUserName);
+        strcpy(settings->smb_password, gPCPassword);
     }
-
-    sprintf(settings->smb_ip, "%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
-    settings->smb_port = gPCPort;
-    strcpy(settings->smb_share, gPCShareName);
-    strcpy(settings->smb_prefix, gETHPrefix);
-    strcpy(settings->smb_user, gPCUserName);
-    strcpy(settings->smb_password, gPCPassword);
 
     // Initialize layer 1 information.
     sbCreatePath(game, partname, ethPrefix, "\\", 0);
 
     if (gPS2Logo) {
-        int fd = open(partname, O_RDONLY, 0666);
-        if (fd >= 0) {
-            EnablePS2Logo = CheckPS2Logo(fd, 0);
-            close(fd);
+        struct vfs_fh *vfs = sbOpen(partname, O_RDONLY, 0666);
+        if (vfs >= 0) {
+            EnablePS2Logo = CheckPS2Logo(vfs, 0);
+            sbClose(vfs);
         }
     }
 
@@ -712,19 +914,34 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
         layer1_start -= 16;
         LOG("DVD-DL layer 1 @ part %u sector 0x%lx.\n", layer1_part, layer1_offset);
     }
-    settings->common.layer1_start = layer1_start;
+    if (gEnableSMB2) {
+        settings_smb2_3->common.layer1_start = layer1_start;
+    } else {
+        settings->common.layer1_start = layer1_start;
+    }
 
     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
         strcpy(filename, game->startup);
     deinit(NO_EXCEPTION, ETH_MODE); // CAREFUL: deinit will call ethCleanUp, so ethGames/game will be freed
 
-    settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_DEV9;
-    settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_SMAP;
+    if (gEnableSMB2) {
+        settings_smb2_3->common.fakemodule_flags |= FAKE_MODULE_FLAG_DEV9;
+        settings_smb2_3->common.fakemodule_flags |= FAKE_MODULE_FLAG_SMAP;
 
-    // adjust ZSO cache
-    settings->common.zso_cache = smbCacheSize;
+        // adjust ZSO cache
+        settings_smb2_3->common.zso_cache = smbCacheSize;
+    } else {
+        settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_DEV9;
+        settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_SMAP;
 
-    sysLaunchLoaderElf(filename, "ETH_MODE", size_smb_cdvdman_irx, smb_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
+        // adjust ZSO cache
+        settings->common.zso_cache = smbCacheSize;
+    }
+    if (gEnableSMB2) {
+        sysLaunchLoaderElf(filename, "ETH_MODE", size_smb_cdvdman_irx, smb_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
+    } else {
+        sysLaunchLoaderElf(filename, "ETH_MODE", size_smb2_3_cdvdman_irx, smb2_3_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
+    }
 }
 
 static config_set_t *ethGetConfig(item_list_t *itemList, int id)
@@ -735,11 +952,13 @@ static config_set_t *ethGetConfig(item_list_t *itemList, int id)
 static int ethGetImage(item_list_t *itemList, char *folder, int isRelative, char *value, char *suffix, GSTEXTURE *resultTex, short psm)
 {
     char path[256];
+    if (gEnableArchivedArt)
+        snprintf(path, sizeof(path), "%s_%s", value, suffix);
     if (isRelative)
         snprintf(path, sizeof(path), "%s%s\\%s_%s", ethPrefix, folder, value, suffix);
     else
         snprintf(path, sizeof(path), "%s%s_%s", folder, value, suffix);
-    return texDiscoverLoad(resultTex, path, -1, 0);
+    return texDiscoverLoad(resultTex, path, -1, gEnableArchivedArt);
 }
 
 static int ethGetTextId(item_list_t *itemList)

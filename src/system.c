@@ -1087,14 +1087,14 @@ int sysCheckVMC(const char *prefix, const char *sep, char *name, int createSize,
     if (createSize == -1)
         unlink(path);
     else {
-        int fd = open(path, O_RDONLY, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
-        if (fd >= 0) {
-            size = lseek(fd, 0, SEEK_END);
+        struct vfs_fh *vfs = sbOpen(path, O_RDONLY, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+        if (vfs != NULL) {
+            size = lseek(vfs->fd, 0, SEEK_END);
 
             if (vmc_superblock) {
                 memset(vmc_superblock, 0, sizeof(vmc_superblock_t));
-                lseek(fd, 0, SEEK_SET);
-                read(fd, (void *)vmc_superblock, sizeof(vmc_superblock_t));
+                lseek(vfs->fd, 0, SEEK_SET);
+                read(vfs->fd, (void *)vmc_superblock, sizeof(vmc_superblock_t));
 
                 LOG("SYSTEM File size  : 0x%X\n", size);
                 LOG("SYSTEM Magic      : %s\n", vmc_superblock->magic);
@@ -1115,7 +1115,7 @@ int sysCheckVMC(const char *prefix, const char *sep, char *name, int createSize,
             else
                 size /= 1048576;
 
-            close(fd);
+            sbClose(vfs);
 
             if (createSize && (createSize != size))
                 unlink(path);

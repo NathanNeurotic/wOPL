@@ -223,6 +223,15 @@ DECLARE_EXPORT_TABLE(oplsmb, 1, 1)
 END_EXPORT_TABLE
 #endif
 
+#ifdef SMB2_DRIVER
+DECLARE_EXPORT_TABLE(oplsmb2, 1, 0)
+	DECLARE_EXPORT(_retonly)
+	DECLARE_EXPORT(_retonly)
+	DECLARE_EXPORT(_retonly)
+	DECLARE_EXPORT(_retonly)
+END_EXPORT_TABLE
+#endif
+
 void _retonly(void) {}
 
 int _ret0(void) {

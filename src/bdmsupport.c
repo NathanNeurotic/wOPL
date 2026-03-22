@@ -339,14 +339,15 @@ static void bdmRenameGame(item_list_t *itemList, int id, char *newName)
 {
     bdm_device_data_t *pDeviceData = (bdm_device_data_t *)itemList->priv;
 
-    sbRename(&pDeviceData->bdmGames, pDeviceData->bdmPrefix, "/", pDeviceData->bdmGameCount, id, newName);
+    sbRenameList(&pDeviceData->bdmGames, pDeviceData->bdmPrefix, "/", pDeviceData->bdmGameCount, id, newName);
     pDeviceData->bdmULSizePrev = -2;
     pDeviceData->ForceRefresh = 1;
 }
 
 void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
 {
-    int i, fd, iop_fd, index, compatmask = 0;
+    int i, iop_fd, index, compatmask = 0;
+    struct vfs_fh *vfs = NULL;
     int EnablePS2Logo = 0;
     int result;
     u64 startingLBA;
@@ -387,9 +388,9 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
 
                 sprintf(vmc_path, "%sVMC/%s.bin", pDeviceData->bdmPrefix, vmc_name);
 
-                fd = open(vmc_path, O_RDONLY);
-                if (fd >= 0) {
-                    iop_fd = ps2sdk_get_iop_fd(fd);
+                vfs = sbOpen(vmc_path, O_RDONLY, 0);
+                if (vfs != NULL) {
+                    iop_fd = ps2sdk_get_iop_fd(vfs->fd);
                     if (fileXioIoctl2(iop_fd, USBMASS_IOCTL_GET_LBA, NULL, 0, &startingLBA, sizeof(startingLBA)) == 0 && (startCluster = (unsigned int)fileXioIoctl(iop_fd, USBMASS_IOCTL_GET_CLUSTER, vmc_path)) != 0) {
 
                         // VMC only supports 32bit LBAs at the moment, so if the starting LBA + size of the VMC crosses the 32bit boundary
@@ -412,7 +413,7 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
                         }
                     }
 
-                    close(fd);
+                    sbClose(vfs);
                 }
             }
         }
@@ -470,9 +471,9 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
     for (i = 0; i < game->parts; i++) {
         // Open file
         sbCreatePath(game, partname, pDeviceData->bdmPrefix, "/", i);
-        fd = open(partname, O_RDONLY);
-        iop_fd = ps2sdk_get_iop_fd(fd);
-        if (fd < 0) {
+        vfs = sbOpen(partname, O_RDONLY, 0);
+        iop_fd = ps2sdk_get_iop_fd(vfs->fd);
+        if (vfs == NULL) {
             sbUnprepare(&settings->common);
             guiMsgBox(_l(_STR_ERR_FILE_INVALID), 0, NULL);
             return;
@@ -482,7 +483,7 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
         int iFragCount = fileXioIoctl2(iop_fd, USBMASS_IOCTL_GET_FRAGLIST, NULL, 0, (void *)&settings->frags[iTotalFragCount], sizeof(bd_fragment_t) * (BDM_MAX_FRAGS - iTotalFragCount));
         if (iFragCount > BDM_MAX_FRAGS) {
             // Too many fragments
-            close(fd);
+            sbClose(vfs);
             sbUnprepare(&settings->common);
             guiMsgBox(_l(_STR_ERR_FRAGMENTED), 0, NULL);
             return;
@@ -491,9 +492,9 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
         iTotalFragCount += iFragCount;
 
         if ((gPS2Logo) && (i == 0))
-            EnablePS2Logo = CheckPS2Logo(fd, 0);
+            EnablePS2Logo = CheckPS2Logo(vfs, 0);
 
-        close(fd);
+        sbClose(vfs);
     }
 
     // Initialize layer 1 information.

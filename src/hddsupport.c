@@ -555,14 +555,15 @@ static void hddFindOPLPartition(void)
 {
     static config_set_t *config;
     char name[64];
-    int fd, ret = 0;
+    struct vfs_fh *vfs;
+    int ret = 0;
 
     fileXioUmount(hddPrefix);
 
     ret = fileXioMount("pfs0:", "hdd0:__common", FIO_MT_RDWR);
     if (ret == 0) {
-        fd = open("pfs0:wOPL/conf_hdd.cfg", O_RDONLY);
-        if (fd >= 0) {
+        vfs = sbOpen("pfs0:wOPL/conf_hdd.cfg", O_RDONLY, 0);
+        if (vfs != NULL) {
             config = configAlloc(0, NULL, "pfs0:wOPL/conf_hdd.cfg");
             configRead(config);
 
@@ -570,15 +571,15 @@ static void hddFindOPLPartition(void)
             snprintf(gOPLPart, sizeof(gOPLPart), "hdd0:%s", name);
 
             configFree(config);
-            close(fd);
+            sbClose(vfs);
 
             return;
         }
 
         hddCheckOPLFolder(hddPrefix);
 
-        fd = open("pfs0:wOPL/conf_hdd.cfg", O_CREAT | O_TRUNC | O_WRONLY);
-        if (fd >= 0) {
+        vfs = sbOpen("pfs0:wOPL/conf_hdd.cfg", O_CREAT | O_TRUNC | O_WRONLY, 0);
+        if (vfs != NULL) {
             config = configAlloc(0, NULL, "pfs0:wOPL/conf_hdd.cfg");
             configRead(config);
 
@@ -586,7 +587,7 @@ static void hddFindOPLPartition(void)
             configWrite(config);
 
             configFree(config);
-            close(fd);
+            sbClose(vfs);
         }
     }
 
@@ -598,15 +599,16 @@ static void hddFindOPLPartition(void)
 static int hddCreateOPLPartition(const char *name)
 {
     int formatArg[3] = {PFS_ZONE_SIZE, 0x2d66, PFS_FRAGMENT};
-    int fd, result;
+    struct vfs_fh *vfs;
+    int result;
     char cmd[140];
 
     sprintf(cmd, "%s,,,128M,PFS", name);
-    if ((fd = open(cmd, O_CREAT | O_TRUNC | O_WRONLY)) >= 0) {
-        close(fd);
+    if ((vfs = sbOpen(cmd, O_CREAT | O_TRUNC | O_WRONLY, 0)) != NULL) {
+        sbClose(vfs);
         result = fileXioFormat(hddPrefix, name, (const char *)&formatArg, sizeof(formatArg));
     } else {
-        result = fd;
+        result = vfs->fd;
     }
 
     return result;

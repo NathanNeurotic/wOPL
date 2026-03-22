@@ -11,4 +11,7 @@ int ethApplyConfig(void);
 int ethGetDHCPStatus(void);
 item_list_t *ethGetObject(int initOnly);
 
+extern struct usmb2_context *gUSMB2;
+extern struct smb2_context *gSMB2;
+
 #endif

@@ -21,7 +21,7 @@ const char *GetSystemDataPath(void);
 char GetSystemFolderLetter(void);
 int sysDeleteFolder(const char *folder);
 
-int CheckPS2Logo(int fd, u32 lba);
+int CheckPS2Logo(struct vfs_fh *vfs, u32 lba);
 
 void delay(int count);
 

@@ -49,6 +49,21 @@ typedef struct
     short allocResult;
 } file_buffer_t;
 
+
+enum vfs_type {
+    FS_PS2 = 0,
+    FS_SMB2,
+};
+
+
+struct vfs_fh
+{
+    enum vfs_type type;
+
+    int fd;
+};
+
+// File utility functions
 int isValidIsoName(char *name, int *pNameLen);
 int sbGetmcID(void);
 int sbGetFileSize(int fd);
@@ -66,7 +81,7 @@ void sbUnprepare(void *pCommon);
 void sbRebuildULCfg(base_game_info_t **list, const char *prefix, int gamecount, int excludeID);
 void sbCreatePath(const base_game_info_t *game, char *path, const char *prefix, const char *sep, int part);
 void sbDelete(base_game_info_t **list, const char *prefix, const char *sep, int gamecount, int id);
-void sbRename(base_game_info_t **list, const char *prefix, const char *sep, int gamecount, int id, char *newname);
+void sbRenameList(base_game_info_t **list, const char *prefix, const char *sep, int gamecount, int id, char *newname);
 config_set_t *sbPopulateConfig(base_game_info_t *game, const char *prefix, const char *sep);
 void sbCreateFolders(const char *path, int createDiscImgFolders);
 file_buffer_t *sbOpenFileBufferBuffer(short allocResult, const void *buffer, unsigned int size);
@@ -75,11 +90,22 @@ int sbReadFileBuffer(file_buffer_t *readContext, char **outBuf);
 void sbWriteFileBuffer(file_buffer_t *fileBuffer, char *inBuf, int size);
 void sbCloseFileBuffer(file_buffer_t *fileBuffer);
 
+// Wrappers for smb2 and ps2 newlib functions
+struct vfs_fh *sbOpen(const char *path, int mode, int flags);
+int sbClose(struct vfs_fh *fh);
+/*
+int sbRead(struct vfs_fh *fh, void *buf, size_t count);
+int sbWrite(struct vfs_fh *fh, const void *buf, size_t count);
+DIR* sbOpendir(struct vfs_fh *fh, const char *name);
+struct dirent *sbReadDir(struct vfs_fh *fh, DIR* dirp);
+*/
+
 // ISO9660 filesystem management functions.
 u32 sbGetISO9660MaxLBA(const char *path);
 int sbProbeISO9660(const char *path, base_game_info_t *game, u32 layer1_offset);
 int sbProbeISO9660_64(const char *path, base_game_info_t *game, u32 layer1_offset);
 
+// Cheat file management functions.
 int sbLoadCheats(const char *path, const char *file);
 
 #endif

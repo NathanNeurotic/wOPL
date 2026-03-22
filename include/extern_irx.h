@@ -126,9 +126,13 @@ IMPORT_BIN2C(smb_mcemu_irx);
 
 IMPORT_BIN2C(smb_cdvdman_irx);
 
+IMPORT_BIN2C(smb2_3_cdvdman_irx);
+
 IMPORT_BIN2C(smbinit_irx);
 
 IMPORT_BIN2C(smbman_irx);
+
+IMPORT_BIN2C(smb2man_irx);
 
 IMPORT_BIN2C(tifinet_irx);
 
@@ -147,6 +151,8 @@ IMPORT_BIN2C(usbmass_bd_irx);
 IMPORT_BIN2C(usbmass_bd_single_irx);
 
 IMPORT_BIN2C(usb_pademu_irx);
+
+IMPORT_BIN2C(usmb2_irx);
 
 IMPORT_BIN2C(xhdd_irx);
 

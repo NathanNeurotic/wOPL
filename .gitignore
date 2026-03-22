@@ -46,6 +46,8 @@ asm/*.c
 # 3rd party
 #
 *modules/network/lwNBD
+*modules/network/libsmb2
+*modules/network/usmb2
 *thirdparty/clang-format-lint-action
 
 # language

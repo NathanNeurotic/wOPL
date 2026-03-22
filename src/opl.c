@@ -132,6 +132,7 @@ char gPCShareNBAddress[17];
 char gPCShareName[32];
 char gPCUserName[32];
 char gPCPassword[32];
+int gEnableSMB2;
 int gNetworkStartup;
 int gHDDSpindown;
 int gBDMStartMode;
@@ -961,22 +962,22 @@ static int checkLoadConfigBDM(int types)
 
 static int checkLoadConfigHDD(int types)
 {
-    int value;
+    struct vfs_fh *value;
     char path[64];
 
     hddLoadModules();
     hddLoadSupportModules();
 
     snprintf(path, sizeof(path), "%sconf_wopl.cfg", gHDDPrefix);
-    value = open(path, O_RDONLY);
-    if (value >= 0) {
-        close(value);
+    value = sbOpen(path, O_RDONLY, 0);
+    if (value != NULL) {
+        sbClose(value);
         configEnd();
         configInit(gHDDPrefix);
-        value = configReadMulti(types);
+        value->fd = configReadMulti(types);
         config_set_t *configOPL = configGetByType(CONFIG_OPL);
         configSetInt(configOPL, CONFIG_OPL_HDD_MODE, START_MODE_AUTO);
-        return value;
+        return value->fd;
     }
 
     return 0;
@@ -1151,6 +1152,7 @@ static void _loadConfig()
             configGetStrCopy(configNet, CONFIG_NET_SMB_SHARE, gPCShareName, sizeof(gPCShareName));
             configGetStrCopy(configNet, CONFIG_NET_SMB_USER, gPCUserName, sizeof(gPCUserName));
             configGetStrCopy(configNet, CONFIG_NET_SMB_PASSW, gPCPassword, sizeof(gPCPassword));
+            configGetInt(configNet, CONFIG_NET_ENABLE_SMB2, &gEnableSMB2);
 
             if (configGetStr(configNet, CONFIG_NET_PS2_IP, &temp))
                 sscanf(temp, "%d.%d.%d.%d", &ps2_ip[0], &ps2_ip[1], &ps2_ip[2], &ps2_ip[3]);
@@ -1327,6 +1329,7 @@ static void _saveConfig()
         configSetStr(configNet, CONFIG_NET_SMB_SHARE, gPCShareName);
         configSetStr(configNet, CONFIG_NET_SMB_USER, gPCUserName);
         configSetStr(configNet, CONFIG_NET_SMB_PASSW, gPCPassword);
+        configSetInt(configNet, CONFIG_NET_ENABLE_SMB2, gEnableSMB2);
     }
 
     char *path = configGetDir();
@@ -1654,6 +1657,7 @@ static void setDefaults(void)
     gPCShareName[0] = '\0';
     gPCUserName[0] = '\0';
     gPCPassword[0] = '\0';
+    gEnableSMB2 = 0; // Default to SMB1
     gNetworkStartup = ERROR_ETH_NOT_STARTED;
     gHDDSpindown = 20;
     gScrollSpeed = 1;

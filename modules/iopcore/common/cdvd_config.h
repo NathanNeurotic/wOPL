@@ -61,6 +61,26 @@ struct cdvdman_settings_smb
     };
 } __attribute__((packed));
 
+struct cdvdman_settings_smb2
+{
+    struct cdvdman_settings_common common;
+    char filename[160];
+    union
+    {
+        struct
+        {
+            // Please keep the string lengths in-sync with the limits within the UI.
+            char smb_ip[16];
+            u16 smb_port;
+            char smb_share[32];
+            char smb_prefix[32];
+            char smb_user[32];
+            char smb_password[32];
+        };
+        u16 FIDs[ISO_MAX_PARTS];
+    };
+} __attribute__((packed));
+
 #define BDM_MAX_FILES 1  // ISO
 #define BDM_MAX_FRAGS 64 // 64 * 8bytes = 512bytes
 

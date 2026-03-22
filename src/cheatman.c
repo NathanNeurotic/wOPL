@@ -318,46 +318,47 @@ static int parse_buf(const char *buf)
 static inline char *read_text_file(const char *filename, int maxsize)
 {
     char *buf = NULL;
-    int fd, filesize;
+    struct vfs_fh *vfs;
+    int filesize;
 
-    fd = open(filename, O_RDONLY);
-    if (fd < 0) {
+    vfs = sbOpen(filename, O_RDONLY, 0);
+    if (vfs == NULL) {
         LOG("%s: Can't open text file %s\n", __FUNCTION__, filename);
         return NULL;
     }
 
-    filesize = lseek(fd, 0, SEEK_END);
+    filesize = lseek(vfs->fd, 0, SEEK_END);
     if (filesize < 0) {
         LOG("%s: Can't seek in text file %s\n", __FUNCTION__, filename);
-        close(fd);
+        sbClose(vfs);
         return NULL;
     }
 
     if (maxsize > 0 && filesize > maxsize) {
         LOG("%s: Text file too large: %i bytes, max: %i bytes\n", __FUNCTION__, filesize, maxsize);
-        close(fd);
+        sbClose(vfs);
         return NULL;
     }
 
     buf = malloc(filesize + 1);
     if (buf == NULL) {
         LOG("%s: Unable to allocate %i bytes\n", __FUNCTION__, filesize + 1);
-        close(fd);
+        sbClose(vfs);
         return NULL;
     }
 
     if (filesize > 0) {
-        lseek(fd, 0, SEEK_SET);
-        if (read(fd, buf, filesize) != filesize) {
+        lseek(vfs->fd, 0, SEEK_SET);
+        if (read(vfs->fd, buf, filesize) != filesize) {
             LOG("%s: Can't read from text file %s\n", __FUNCTION__, filename);
             free(buf);
-            close(fd);
+            sbClose(vfs);
             return NULL;
         }
     }
 
     buf[filesize] = '\0';
-    close(fd);
+    sbClose(vfs);
 
     return buf;
 }

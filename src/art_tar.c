@@ -9,7 +9,7 @@
 
 static ArtTarEntry *s_tarIndex = NULL;
 static u32 s_tarCount = 0;
-static int s_tarFd = -1;
+static struct vfs_fh *s_tarFd = NULL;
 
 static u64 parseOctal(const char *s, int len)
 {
@@ -48,9 +48,9 @@ ArtTarEntry *findTarEntry(const char *filename)
 
 int closeTarFile(void)
 {
-    if (s_tarFd >= 0) {
-        close(s_tarFd);
-        s_tarFd = -1;
+    if (s_tarFd == NULL) {
+        sbClose(s_tarFd);
+        s_tarFd = NULL;
     }
     free(s_tarIndex);
     s_tarIndex = NULL;
@@ -60,30 +60,30 @@ int closeTarFile(void)
 
 static int readTarCache(const char *cachePath, const char *tarPath)
 {
-    int fd = open(cachePath, O_RDONLY);
-    if (fd < 0)
+    struct vfs_fh *vfs = sbOpen(cachePath, O_RDONLY, 0);
+    if (vfs == NULL)
         return -1;
 
     struct stat stCache;
-    if (fstat(fd, &stCache) < 0) {
-        close(fd);
+    if (fstat(vfs->fd, &stCache) < 0) {
+        sbClose(vfs);
         return -1;
     }
 
     int fileSize = stCache.st_size;
     if (fileSize < (int)sizeof(ArtCacheHeader)) {
-        close(fd);
+        sbClose(vfs);
         return -1;
     }
 
     void *buf = memalign(64, fileSize);
     if (!buf) {
-        close(fd);
+        sbClose(vfs);
         return -1;
     }
 
-    int bytesRead = read(fd, buf, fileSize);
-    close(fd);
+    int bytesRead = read(vfs->fd, buf, fileSize);
+    sbClose(vfs);
     if (bytesRead != fileSize) {
         free(buf);
         return -1;
@@ -143,22 +143,22 @@ static int writeTarCache(const char *cachePath, const char *tarPath)
     hdr.tarSize = (u64)stTar.st_size;
     hdr.entryCount = s_tarCount;
 
-    int fd = open(cachePath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd < 0)
+    struct vfs_fh *vfs = sbOpen(cachePath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (vfs == NULL)
         return -1;
 
-    if (write(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        close(fd);
+    if (write(vfs->fd, &hdr, sizeof(hdr)) != sizeof(hdr)) {
+        sbClose(vfs);
         return -1;
     }
 
     int entriesSize = sizeof(ArtTarEntry) * s_tarCount;
-    if (write(fd, s_tarIndex, entriesSize) != entriesSize) {
-        close(fd);
+    if (write(vfs->fd, s_tarIndex, entriesSize) != entriesSize) {
+        sbClose(vfs);
         return -1;
     }
 
-    close(fd);
+    sbClose(vfs);
     return 0;
 }
 
@@ -185,12 +185,12 @@ int loadTarFile(const char *path)
         closeTarFile();
 
     if (readTarCache(fullCachePath, path) == 0) {
-        s_tarFd = open(path, O_RDONLY);
-        return (s_tarFd >= 0) ? 0 : -1;
+        s_tarFd = sbOpen(path, O_RDONLY, 0);
+        return (s_tarFd != NULL) ? 0 : -1;
     }
 
-    s_tarFd = open(path, O_RDONLY);
-    if (s_tarFd < 0)
+    s_tarFd = sbOpen(path, O_RDONLY, 0);
+    if (s_tarFd == NULL)
         return -1;
 
     s_tarIndex = NULL;
@@ -198,7 +198,7 @@ int loadTarFile(const char *path)
 
     while (1) {
         unsigned char header[TAR_BLOCK_SIZE];
-        int bytesRead = read(s_tarFd, header, TAR_BLOCK_SIZE);
+        int bytesRead = read(s_tarFd->fd, header, TAR_BLOCK_SIZE);
         if (bytesRead == 0)
             break;
         if (bytesRead != TAR_BLOCK_SIZE)
@@ -217,7 +217,7 @@ int loadTarFile(const char *path)
         if (rawSize64 > MAX_FILE_SIZE || paddedSize64 > MAX_FILE_SIZE)
             goto fail;
 
-        u64 dataOffset = lseek64(s_tarFd, 0, SEEK_CUR);
+        u64 dataOffset = lseek64(s_tarFd->fd, 0, SEEK_CUR);
         if (dataOffset == (u64)-1)
             goto fail;
 
@@ -235,7 +235,7 @@ int loadTarFile(const char *path)
         entry->paddedSize = (u32)paddedSize64;
         s_tarCount++;
 
-        if (lseek64(s_tarFd, paddedSize64, SEEK_CUR) == (u64)-1)
+        if (lseek64(s_tarFd->fd, paddedSize64, SEEK_CUR) == (u64)-1)
             goto fail;
     }
 
@@ -259,12 +259,12 @@ u32 readFileFromTar(const ArtTarEntry *entry, void *dst, u32 dstSize)
     if (dstSize < entry->rawSize)
         return 0;
 
-    if (lseek64(s_tarFd, entry->offset, SEEK_SET) != entry->offset)
+    if (lseek64(s_tarFd->fd, entry->offset, SEEK_SET) != entry->offset)
         return 0;
 
     u32 total = 0;
     while (total < entry->rawSize) {
-        int bytesRead = read(s_tarFd, (unsigned char *)dst + total, entry->rawSize - total);
+        int bytesRead = read(s_tarFd->fd, (unsigned char *)dst + total, entry->rawSize - total);
         if (bytesRead <= 0)
             return 0;
 

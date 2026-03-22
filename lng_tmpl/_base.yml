@@ -216,6 +216,8 @@ gui_strings:
   string: User
 - label: PASSWORD
   string: Password
+- label: ENABLE_SMB2
+  string: Enable SMB2
 - label: NOT_SET
   string: <not set>
 - label: ADDRESS_TYPE

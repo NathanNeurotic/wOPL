@@ -38,6 +38,15 @@ USE_DEV9 = 1
 IOP_INCS += -I../../network/common
 endif
 
+ifeq ($(USE_SMB2),1)
+IOP_BIN  = smb2_3_cdvdman.irx
+IOP_OBJS_DIR = obj.smb2/
+IOP_OBJS += device-smb2.o
+IOP_CFLAGS += -DSMB2_DRIVER
+USE_DEV9 = 1
+IOP_INCS += -I../../network/common
+endif
+
 ifeq ($(USE_BDM),1)
 IOP_BIN  = bdm_cdvdman.irx
 IOP_OBJS_DIR = obj.bdm/

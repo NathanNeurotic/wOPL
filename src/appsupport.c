@@ -78,17 +78,18 @@ static char *appGetELFName(char *name)
 
 static float appGetELFSize(char *path)
 {
-    int fd, size;
+    struct vfs_fh *vfs;
+    int size;
     float bytesInMiB = 1048576.0f;
 
-    fd = open(path, O_RDONLY);
-    if (fd < 0) {
+    vfs = sbOpen(path, O_RDONLY, 0);
+    if (vfs != NULL) {
         LOG("Failed to open APP %s\n", path);
         return 0.0f;
     }
 
-    size = sbGetFileSize(fd);
-    close(fd);
+    size = sbGetFileSize(vfs->fd);
+    sbClose(vfs);
 
     // Return size in MiB
     return (size / bytesInMiB);
@@ -385,7 +386,7 @@ static void appRenameItem(item_list_t *itemList, int id, char *newName)
 
 static void appLaunchItem(item_list_t *itemList, int id, config_set_t *configSet)
 {
-    int fd;
+    struct vfs_fh *vfs;
     char filename[256];
     const char *argv1;
 
@@ -408,20 +409,20 @@ static void appLaunchItem(item_list_t *itemList, int id, config_set_t *configSet
     if (!strncmp("mass?", filename, 5)) {
         for (int i = 0; i < BDM_MODE4; i++) {
             filename[4] = i + '0';
-            fd = open(filename, O_RDONLY);
-            if (fd >= 0) {
-                close(fd);
+            vfs = sbOpen(filename, O_RDONLY, 0);
+            if (vfs != NULL) {
+                sbClose(vfs);
                 break;
             }
         }
     }
 
-    fd = open(filename, O_RDONLY);
-    if (fd >= 0) {
+    vfs = sbOpen(filename, O_RDONLY, 0);
+    if (vfs != NULL) {
         int mode, argc = 0;
         char partition[128];
         char *argv[1];
-        close(fd);
+        sbClose(vfs);
 
         strcpy(partition, "");
 

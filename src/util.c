@@ -101,19 +101,19 @@ int GetSystemRegion(void)
 
 void logfile(char *text)
 {
-    int fd = open("mass:/wopl_log.txt", O_APPEND | O_CREAT | O_WRONLY);
-    write(fd, text, strlen(text));
-    close(fd);
+    struct vfs_fh *vfs = sbOpen("mass:/wopl_log.txt", O_APPEND | O_CREAT | O_WRONLY, 0);
+    write(vfs->fd, text, strlen(text));
+    sbClose(vfs);
 }
 
 void logbuffer(char *path, void *buf, size_t size)
 {
-    int fd = open(path, O_CREAT | O_TRUNC | O_WRONLY);
-    write(fd, buf, size);
-    close(fd);
+    struct vfs_fh *vfs = sbOpen(path, O_CREAT | O_TRUNC | O_WRONLY, 0);
+    write(vfs->fd, buf, size);
+    sbClose(vfs);
 }
 
-int CheckPS2Logo(int fd, u32 lba)
+int CheckPS2Logo(struct vfs_fh *vfs, u32 lba)
 {
     u8 logo[12 * 2048] ALIGNED(64);
     void *buffer = logo;
@@ -124,12 +124,12 @@ int CheckPS2Logo(int fd, u32 lba)
 
     w = 0;
     memset(logo, 0, sizeof(logo));
-    if ((fd > 0) && (lba == 0)) { // BDM_MODE & ETH_MODE
-        lseek(fd, 0, SEEK_SET);
-        w = read(fd, logo, sizeof(logo)) == sizeof(logo);
+    if ((vfs->fd == -1) && (lba == 0)) { // BDM_MODE & ETH_MODE
+        lseek(vfs->fd, 0, SEEK_SET);
+        w = read(vfs->fd, logo, sizeof(logo)) == sizeof(logo);
     }
-    if ((lba > 0) && (fd == 0)) {       // HDD_MODE
-        for (k = 0; k <= 12 * 4; k++) { // NB: Disc sector size (2048 bytes) and HDD sector size (512 bytes) differ, hence why we multiplied the number of sectors (12) by 4.
+    if ((lba > 0) && (vfs->fd == NULL)) { // HDD_MODE
+        for (k = 0; k <= 12 * 4; k++) {   // NB: Disc sector size (2048 bytes) and HDD sector size (512 bytes) differ, hence why we multiplied the number of sectors (12) by 4.
             w = !(hddReadSectors(lba + k, 1, buffer));
             if (!w)
                 break;
@@ -140,7 +140,7 @@ int CheckPS2Logo(int fd, u32 lba)
     if (*(u32 *)logo == ZSO_MAGIC) {
         // initialize ZSO
         ziso_init((ZISO_header *)logo, *(u32 *)((u8 *)logo + sizeof(ZISO_header)));
-        probed_fd = fd;
+        probed_fd = vfs->fd;
         probed_lba = lba;
         // read ZISO data
         w = (ziso_read_sector(logo, 0, 12) == 12);

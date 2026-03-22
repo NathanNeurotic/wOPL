@@ -751,6 +751,7 @@ void guiShowNetConfig(void)
     diaSetString(diaNetConfig, NETCFG_SHARE_NAME, gPCShareName);
     diaSetString(diaNetConfig, NETCFG_SHARE_USERNAME, gPCUserName);
     diaSetString(diaNetConfig, NETCFG_SHARE_PASSWORD, gPCPassword);
+    diaSetInt(diaNetConfig, NETCFG_SMB2_ENABLE, gEnableSMB2);
     diaSetInt(diaNetConfig, NETCFG_ETHOPMODE, gETHOpMode);
 
     // Update the spacer item between the OK and reconnect buttons (See dialogs.c).
@@ -785,6 +786,7 @@ void guiShowNetConfig(void)
         diaGetString(diaNetConfig, NETCFG_SHARE_NAME, gPCShareName, sizeof(gPCShareName));
         diaGetString(diaNetConfig, NETCFG_SHARE_USERNAME, gPCUserName, sizeof(gPCUserName));
         diaGetString(diaNetConfig, NETCFG_SHARE_PASSWORD, gPCPassword, sizeof(gPCPassword));
+        diaGetInt(diaNetConfig, NETCFG_SMB2_ENABLE, &gEnableSMB2);
 
         if (result == NETCFG_RECONNECT && gNetworkStartup < ERROR_ETH_SMB_CONN)
             gNetworkStartup = ERROR_ETH_SMB_LOGON;

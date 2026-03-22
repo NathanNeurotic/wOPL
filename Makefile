@@ -78,7 +78,7 @@ endif
 
 FRONTEND_OBJS = pad.o xparam.o fntsys.o renderman.o menusys.o OSDHistory.o system.o lang.o lang_internal.o config.o dialogs.o tetris.o \
 		dia.o ioman.o texcache.o themes.o supportbase.o bdmsupport.o ethsupport.o hddsupport.o zso.o lz4.o \
-		appsupport.o mmcesupport.o favsupport.o gui.o guigame.o vmc_groups.o textures.o art_tar.o opl.o atlas.o nbns.o gsm.o cheatman.o sound.o ps2cnf.o
+		appsupport.o mmcesupport.o favsupport.o gui.o guigame.o vmc_groups.o textures.o art_tar.o opl.o atlas.o nbns.o gsm.o cheatman.o sound.o ps2cnf.o ../modules/network/usmb2/usmb2.o
 
 IOP_OBJS =	iomanx.o filexio.o ps2fs.o usbd.o bdmevent.o \
 		bdm.o bdmfs_fatfs.o usbmass_bd.o usbmass_bd_single.o iLinkman.o IEEE1394_bd.o mx4sio_bd.o \
@@ -92,9 +92,9 @@ IOP_OBJS =	iomanx.o filexio.o ps2fs.o usbd.o bdmevent.o \
 
 EECORE_OBJS = ee_core.o ioprp.o util.o \
 		udnl.o imgdrv.o eesync.o \
-		bdm_cdvdman.o bdm_ata_cdvdman.o IOPRP_img.o smb_cdvdman.o \
+		bdm_cdvdman.o bdm_ata_cdvdman.o IOPRP_img.o smb_cdvdman.o smb2_3_cdvdman.o \
 		hdd_cdvdman.o mmce_cdvdman.o hdd_hdpro_cdvdman.o cdvdfsv.o \
-		ingame_smstcpip.o smap_ingame.o smbman.o smbinit.o
+		ingame_smstcpip.o smap_ingame.o smbman.o smbinit.o smb2man.o usmb2.o
 
 PNG_ASSETS = loading_1 loading_2 loading_3 loading_4 loading_5 loading_6 loading_7 loading_8 category_empty_bdm category_usb category_ilink category_mx4sio category_hdd_bdm \
 	category_hdd_apa category_net_smb category_apps category_fav category_mmce mark_star button_symbol_cross button_symbol_triangle button_symbol_circle button_symbol_square button_select button_start button_dpad_left button_dpad_right \
@@ -133,7 +133,7 @@ PNG_ASSETS_DIR = gfx/
 MAPFILE = wopl.map
 EE_LDFLAGS += -Wl,-Map,$(MAPFILE)
 
-EE_LIBS = -L$(PS2SDK)/ports/lib -L$(GSKIT)/lib -L./lib -lgskit -ldmakit -lpoweroff -lfileXio -lpatches -lpng -lz -lmc -lfreetype -lvux -lcdvd -lnetman -lps2ips -laudsrv -lvorbisfile -lvorbis -logg -lpadx -lelf-loader-nocolour -lc -lkernel
+EE_LIBS = -L$(PS2SDK)/ports/lib -L$(GSKIT)/lib -L./lib -lgskit -ldmakit -lpoweroff -lfileXio -lpatches -lpng -lz -lmc -lfreetype -lvux -lcdvd -lnetman -lps2ips -laudsrv -lvorbisfile -lvorbis -logg -lpadx -lelf-loader-nocolour -lc -lkernel -lsmb2_rpc
 EE_INCS += -I$(PS2SDK)/ports/include -I$(PS2SDK)/ports/include/freetype2 -I$(GSKIT)/include -I$(GSKIT)/ee/dma/include -I$(GSKIT)/ee/gs/include -Imodules/iopcore/common -Imodules/network/common -Imodules/hdd/common -Iinclude
 BIN2C = $(PS2SDK)/bin/bin2c
 
@@ -211,7 +211,7 @@ else
   SMSTCPIP_INGAME_CFLAGS = INGAME_DRIVER=1
 endif
 
-EE_CFLAGS += -fsingle-precision-constant -DWOPL_VERSION=\"$(wOPL_VERSION)\"
+EE_CFLAGS += -fsingle-precision-constant -DWOPL_VERSION=\"$(wOPL_VERSION)\" -DUSMB2_FEATURE_CLOSE=1 -DUSMB2_FEATURE_WRITE -DUSMB2_FEATURE_OPENDIR -D__PS2__ -I. -I$(EE_SRC_DIR) $(EE_INCS)
 
 # There are a few places where the config key/value are truncated, so disable these warnings
 EE_CFLAGS += -Wno-format-truncation -Wno-stringop-truncation
@@ -227,11 +227,11 @@ EE_LDFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections
 
 .SILENT:
 
-.PHONY: all release debug iopcore_debug eesio_debug ingame_debug deci2_debug debug_ppctty iopcore_ppctty_debug ingame_ppctty_debug clean rebuild pc_tools pc_tools_win32 woplversion format format-check ps2sdk-not-setup download_lng download_lwNBD languages
+.PHONY: all release debug iopcore_debug eesio_debug ingame_debug deci2_debug debug_ppctty iopcore_ppctty_debug ingame_ppctty_debug clean rebuild pc_tools pc_tools_win32 woplversion format format-check ps2sdk-not-setup download_lng download_lwNBD download_smb2man download_usmb2 languages
 
 ifdef PS2SDK
 
-all: download_lng download_lwNBD languages
+all: download_smb2man download_usmb2 download_lng download_lwNBD languages
 	echo "Building Open PS2 Loader $(wOPL_VERSION)..."
 	echo "-Interface"
 ifneq ($(NOT_PACKED),1)
@@ -240,7 +240,7 @@ else
 	$(MAKE) $(EE_BIN)
 endif
 
-release: download_lng download_lwNBD languages $(EE_VPKD).ZIP
+release: download_lng download_lwNBD download_smb2man download_usmb2 languages $(EE_VPKD).ZIP
 
 debug:
 	$(MAKE) DEBUG=1 all
@@ -266,7 +266,7 @@ iopcore_ppctty_debug:
 ingame_ppctty_debug:
 	$(MAKE) DEBUG=1 INGAME_DEBUG=1 TTY_APPROACH=PPC_UART all
 
-clean:	download_lwNBD
+clean:	download_lwNBD download_smb2man download_usmb2
 	echo "Cleaning..."
 	echo "-Interface"
 	rm -fr $(MAPFILE) $(EE_BIN) $(EE_BIN_PACKED) $(EE_BIN_STRIPPED) $(EE_VPKD).* $(EE_OBJS_DIR) $(EE_ASM_DIR)
@@ -280,6 +280,7 @@ clean:	download_lwNBD
 	$(MAKE) -C modules/iopcore/cdvdman USE_BDM_ATA=1 clean
 	$(MAKE) -C modules/iopcore/cdvdman USE_MMCE=1 clean
 	$(MAKE) -C modules/iopcore/cdvdman USE_SMB=1 clean
+	$(MAKE) -C modules/iopcore/cdvdman USE_SMB2=1 clean
 	$(MAKE) -C modules/iopcore/cdvdman USE_HDD=1 clean
 	$(MAKE) -C modules/iopcore/cdvdman USE_HDPRO=1 clean
 	echo " -cdvdfsv"
@@ -320,6 +321,8 @@ clean:	download_lwNBD
 	$(MAKE) -C modules/vmc/genvmc clean
 	echo " -lwnbdsvr"
 	$(MAKE) -C modules/network/lwNBD/ TARGET=iop clean
+	echo " -usmb2"
+	$(MAKE) -f modules/network/usmb2/Makefile.ps2iop clean
 	echo " -udptty-ingame"
 	$(MAKE) -C modules/debug/udptty-ingame clean
 	echo " -ps2link"
@@ -440,6 +443,12 @@ modules/iopcore/cdvdman/smb_cdvdman.irx: modules/iopcore/cdvdman
 	$(MAKE) $(CDVDMAN_PS2LOGO_FLAGS) $(CDVDMAN_DEBUG_FLAGS) USE_SMB=1 -C $< all
 
 $(EE_ASM_DIR)smb_cdvdman.c: modules/iopcore/cdvdman/smb_cdvdman.irx | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ $(*F)_irx
+
+modules/iopcore/cdvdman/smb2_3_cdvdman.irx: modules/iopcore/cdvdman
+	$(MAKE) $(CDVDMAN_PS2LOGO_FLAGS) $(CDVDMAN_DEBUG_FLAGS) USE_SMB2=1 -C $< all
+
+$(EE_ASM_DIR)smb2_3_cdvdman.c: modules/iopcore/cdvdman/smb2_3_cdvdman.irx | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ $(*F)_irx
 
 modules/iopcore/cdvdman/hdd_cdvdman.irx: modules/iopcore/cdvdman
@@ -650,6 +659,18 @@ modules/network/smbinit/smbinit.irx: modules/network/smbinit
 $(EE_ASM_DIR)smbinit.c: modules/network/smbinit/smbinit.irx | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ $(*F)_irx
 
+modules/network/libsmb2/build/lib/smb2man.irx: modules/network/libsmb2
+	$(MAKE) -C $< -f Makefile.platform ps2_irx_all
+
+$(EE_ASM_DIR)smb2man.c: modules/network/libsmb2/build/lib/smb2man.irx | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ $(*F)_irx	
+
+modules/network/usmb2/usmb2.irx: modules/network/usmb2
+	$(MAKE) -C $< -f Makefile.ps2iop
+
+$(EE_ASM_DIR)usmb2.c: modules/network/usmb2/usmb2.irx | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ $(*F)_irx
+
 $(EE_ASM_DIR)ps2atad.c: $(PS2SDK)/iop/irx/ata_bd.irx | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ $(*F)_irx
 
@@ -827,6 +848,12 @@ download_lng:
 
 download_lwNBD:
 	sh download_lwNBD.sh
+
+download_usmb2:
+	sh download_usmb2.sh
+
+download_smb2man:
+	sh download_smb2man.sh
 
 download_cfla:
 	sh download_cfla.sh

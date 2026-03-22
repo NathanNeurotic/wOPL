@@ -21,6 +21,9 @@
 
 #include "../modules/isofs/zso.h"
 
+#include "../modules/network/usmb2/usmb2.h"
+#include "include/ethsupport.h"
+
 extern int probed_fd;
 extern u32 probed_lba;
 
@@ -504,6 +507,54 @@ void sbCloseFileBuffer(file_buffer_t *fileBuffer)
     }
     free(fileBuffer->buffer);
     free(fileBuffer);
+}
+
+struct vfs_fh *sbOpen(const char *path, int mode, int flags)
+{
+    struct vfs_fh *fh = malloc(sizeof(struct vfs_fh));
+
+    if (!fh) {
+        return NULL;
+    }
+
+    if (!strncmp(path, "smb2", 4)) {
+        fh->type = FS_SMB2;
+        // fh->fd = (int)usmb2_open(usmb2, path, mode);
+        if (fh->fd == -1) {
+            free(fh);
+            return NULL;
+        }
+    } else {
+        fh->type = FS_PS2;
+        fh->fd = open(path, mode, flags);
+        if (fh->fd == -1) {
+            free(fh);
+            return NULL;
+        }
+    }
+
+    return fh;
+}
+
+int sbClose(struct vfs_fh *fh)
+{
+    int rc = 0;
+
+    if (fh == NULL) {
+        return 0;
+    }
+
+    switch (fh->type) {
+        case FS_PS2:
+            rc = close(fh->fd);
+            break;
+        case FS_SMB2:
+            // rc = (int)usmb2_close(usmb2, (uint8_t *)fh->fd);
+            free(fh);
+            break;
+    }
+    free(fh);
+    return rc;
 }
 
 static int GetStartupExecName(const char *path, char *filename, int maxlength)
@@ -1162,7 +1213,7 @@ void sbDelete(base_game_info_t **list, const char *prefix, const char *sep, int 
     }
 }
 
-void sbRename(base_game_info_t **list, const char *prefix, const char *sep, int gamecount, int id, char *newname)
+void sbRenameList(base_game_info_t **list, const char *prefix, const char *sep, int gamecount, int id, char *newname)
 {
     int part;
     char oldpath[256], newpath[256];

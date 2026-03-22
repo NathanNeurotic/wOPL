@@ -448,27 +448,27 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId, int a
         readData = &PngFileBufferPtr;
         readFunction = &texReadMemFunction;
     } else if (filePath) {
-        int fd = open(filePath, O_RDONLY, 0);
-        if (fd < 0)
+        struct vfs_fh *vfs = sbOpen(filePath, O_RDONLY, 0);
+        if (!vfs)
             return ERR_BAD_FILE;
 
-        int fileSize = lseek(fd, 0, SEEK_END);
-        lseek(fd, 0, SEEK_SET);
+        int fileSize = lseek(vfs->fd, 0, SEEK_END);
+        lseek(vfs->fd, 0, SEEK_SET);
 
         pFileBuffer = malloc(fileSize);
         if (pFileBuffer == NULL) {
-            close(fd);
+            sbClose(vfs);
             return ERR_BAD_FILE; // There's no out of memory error...
         }
 
-        if (read(fd, pFileBuffer, fileSize) != fileSize) {
+        if (read(vfs->fd, pFileBuffer, fileSize) != fileSize) {
             LOG("texLoadAll: failed to read file %s\n", filePath);
             free(pFileBuffer);
-            close(fd);
+            sbClose(vfs);
             return ERR_BAD_FILE;
         }
 
-        close(fd);
+        sbClose(vfs);
 
         PngFileBufferPtr = pFileBuffer;
         readData = &PngFileBufferPtr;
@@ -595,10 +595,10 @@ int texDiscoverLoad(GSTEXTURE *texture, const char *path, int texId, int archive
             return (texLoad(texture, filePath, archived) >= 0) ? 0 : ERR_BAD_FILE;
         }
     } else {
-        int fd = open(filePath, O_RDONLY);
-        if (fd > 0) {
+        struct vfs_fh *vfs = sbOpen(filePath, O_RDONLY, 0);
+        if (vfs) {
             // File found, load it
-            close(fd);
+            sbClose(vfs);
             return (texLoad(texture, filePath, archived) >= 0) ? 0 : ERR_BAD_FILE;
         }
     }

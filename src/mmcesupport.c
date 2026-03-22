@@ -191,7 +191,7 @@ static void mmceDeleteGame(item_list_t *itemList, int id)
 
 static void mmceRenameGame(item_list_t *itemList, int id, char *newName)
 {
-    sbRename(&mmceGames, mmcePrefix, "/", mmceGameCount, id, newName);
+    sbRenameList(&mmceGames, mmcePrefix, "/", mmceGameCount, id, newName);
     mmceULSizePrev = -2;
 }
 
@@ -264,10 +264,10 @@ void mmceLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
     sbCreatePath(game, partname, mmcePrefix, "/", 0);
 
     if (gPS2Logo) {
-        int fd = open(partname, O_RDONLY, 0666);
-        if (fd >= 0) {
-            EnablePS2Logo = CheckPS2Logo(fd, 0);
-            close(fd);
+        struct vfs_fh *vfs = sbOpen(partname, O_RDONLY, 0666);
+        if (vfs != NULL) {
+            EnablePS2Logo = CheckPS2Logo(vfs, 0);
+            sbClose(vfs);
         }
     }
 
