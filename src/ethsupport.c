@@ -65,6 +65,9 @@ static struct ip4_addr lastGW;
 struct usmb2_context *gUSMB2;
 struct smb2_context *gSMB2;
 
+
+int gEnableSMB2;
+
 // forward declaration
 static item_list_t ethGameList;
 static int ethWaitValidNetIFLinkState(void);

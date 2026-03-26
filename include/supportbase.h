@@ -1,6 +1,8 @@
 #ifndef __SUPPORT_BASE_H
 #define __SUPPORT_BASE_H
 
+#include "include/config.h"
+
 #define UL_GAME_NAME_MAX       32
 #define ISO_GAME_NAME_MAX      160
 #define ISO_GAME_EXTENSION_MAX 4

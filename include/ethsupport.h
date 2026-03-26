@@ -24,6 +24,11 @@ extern int gETHStartMode;
 // describes what is happening in the network startup thread (>0 means loading, <0 means error)...
 extern int gNetworkStartup;
 
+extern int gEnableSMB2;
+
+extern struct usmb2_context *gUSMB2;
+extern struct smb2_context *gSMB2;
+
 void ethDeinitModules(void);      // Module-only deinitialization, without the GUI's knowledge (for specific reasons, otherwise unused).
 int ethLoadInitModules(void);     // Initializes Ethernet and applies configuration.
 void ethDisplayErrorStatus(void); // Displays the current error status (if any). GUI must be already initialized.
@@ -32,7 +37,5 @@ int ethApplyConfig(void);
 int ethGetDHCPStatus(void);
 item_list_t *ethGetObject(int initOnly);
 
-extern struct usmb2_context *gUSMB2;
-extern struct smb2_context *gSMB2;
 
 #endif
