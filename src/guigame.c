@@ -3,7 +3,7 @@
  PADEMU by belek666
 */
 
-#include "include/opl.h"
+#include "include/common.h"
 #include "include/gui.h"
 #include "include/ioman.h"
 #include "include/lang.h"
@@ -15,6 +15,9 @@
 #include "include/guigame.h"
 #include "include/ds34common.h"
 #include "include/vmc_groups.h"
+#include "include/supportbase.h"
+#include <stdio.h>
+#include "include/pggsm.h"
 
 #ifdef PADEMU
 #include <libds34bt.h>
@@ -1128,7 +1131,7 @@ void guiGameRemoveGlobalSettings(config_set_t *configGame)
         configRemoveKey(configGame, CONFIG_ITEM_PADEMUSETTINGS);
         configRemoveKey(configGame, CONFIG_ITEM_PADMACROSETTINGS);
 #endif
-        saveConfig(CONFIG_GAME, 0);
+        configSave(CONFIG_GAME, 0);
     }
 }
 

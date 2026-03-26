@@ -4,7 +4,6 @@
  Review OpenUsbLd README & LICENSE files for further details.
  */
 
-#include "include/opl.h"
 #include "include/gui.h"
 #include "include/renderman.h"
 #include "include/menusys.h"
@@ -22,7 +21,7 @@
 #include "include/sound.h"
 #include "include/guigame.h"
 #include "include/tetris.h"
-
+#include "include/common.h"
 #include <malloc.h>
 #include <math.h>
 #include <kernel.h>
@@ -30,9 +29,12 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <libvux.h>
+#include <stdio.h>
 
 // Last Played Auto Start
 #include <time.h>
+
+extern unsigned int frameCounter;
 
 static int gScheduledOps;
 static int gCompletedOps;
@@ -54,6 +56,14 @@ static int showLngPopup;
 
 static clock_t popupTimer;
 
+int gAutoStartLastPlayed;
+clock_t CronStart;
+int showCfgPopup;
+int gEnableNotifications;
+int gScrollSpeed;
+
+static char errorMessage[256];
+
 // forward decl.
 static void guiShow();
 
@@ -66,6 +76,9 @@ static float fps = 0.0f;
 
 extern GSGLOBAL *gsGlobal;
 #endif
+
+
+#define VMODE_CHANGE_CONFIRMATION_TIMEOUT_MS 10000
 
 // Global data
 int guiInactiveFrames;
@@ -109,6 +122,12 @@ static int transIndex;
 static GSTEXTURE gBackgroundTex;
 static int pperm[512];
 static float fadetbl[FADE_SIZE + 1];
+
+unsigned char gDefaultBgColor[3];
+unsigned char gDefaultTextColor[3];
+unsigned char gDefaultSelTextColor[3];
+unsigned char gDefaultUITextColor[3];
+unsigned char gDefaultPlasmaBlendColor[3];
 
 static VU_VECTOR pgrad3[12] = {{1, 1, 0, 1}, {-1, 1, 0, 1}, {1, -1, 0, 1}, {-1, -1, 0, 1}, {1, 0, 1, 1}, {-1, 0, 1, 1}, {1, 0, -1, 1}, {-1, 0, -1, 1}, {0, 1, 1, 1}, {0, -1, 1, 1}, {0, 1, -1, 1}, {0, -1, -1, 1}};
 
@@ -464,7 +483,7 @@ void guiShowConfig()
         if (ret == BLOCKDEVICE_BUTTON)
             guiShowBlockDeviceConfig();
 
-        applyConfig(-1, -1, 0);
+        configApply(-1, -1, 0);
         menuReinitMainMenu();
     }
 }
@@ -514,7 +533,7 @@ void guiShowMMCEConfig()
         diaGetString(diaMMCEConfig, CFG_MMCEPREFIX, gMMCEPrefix, sizeof(gMMCEPrefix));
     }
 
-    applyConfig(-1, -1, 0);
+    configApply(-1, -1, 0);
     menuReinitMainMenu();
 }
 
@@ -662,7 +681,7 @@ reselect_video_mode:
         if (previousTheme != themeID && isBgmPlaying())
             bgmStop();
 
-        applyConfig(themeID, langID, 1);
+        configApply(themeID, langID, 1);
         sfxInit(0);
 
         if (gEnableBGM && !isBgmPlaying())
@@ -673,7 +692,7 @@ reselect_video_mode:
         if (guiConfirmVideoMode() == 0) {
             // Restore previous video mode, without changing the theme & language settings.
             gVMode = previousVMode;
-            applyConfig(themeID, langID, 1);
+            configApply(themeID, langID, 1);
             goto reselect_video_mode;
         }
     }
@@ -791,7 +810,7 @@ void guiShowNetConfig(void)
         if (result == NETCFG_RECONNECT && gNetworkStartup < ERROR_ETH_SMB_CONN)
             gNetworkStartup = ERROR_ETH_SMB_LOGON;
 
-        applyConfig(-1, -1, 0);
+        configApply(-1, -1, 0);
     }
 }
 
@@ -810,7 +829,7 @@ void guiShowParentalLockConfig(void)
         diaGetString(diaParentalLockConfig, CFG_PARENLOCK_PASSWORD, password, CONFIG_KEY_VALUE_LEN);
 
         if (strlen(password) > 0) {
-            if (strncmp(OPL_PARENTAL_LOCK_MASTER_PASS, password, CONFIG_KEY_VALUE_LEN) != 0) {
+            if (strncmp(PARENTAL_LOCK_MASTER_PASS, password, CONFIG_KEY_VALUE_LEN) != 0) {
                 // Store password
                 configSetStr(configOPL, CONFIG_OPL_PARENTAL_LOCK_PWD, password);
             } else {
@@ -900,7 +919,7 @@ void guiShowControllerConfig(void)
             guiGameShowPadMacroConfig(1);
         }
 #endif
-        applyConfig(-1, -1, 1);
+        configApply(-1, -1, 1);
     }
 }
 
@@ -1709,7 +1728,7 @@ int guiConfirmVideoMode(void)
 
     sfxPlay(SFX_MESSAGE);
 
-    timeEnd = clock() + OPL_VMODE_CHANGE_CONFIRMATION_TIMEOUT_MS * (CLOCKS_PER_SEC / 1000);
+    timeEnd = clock() + VMODE_CHANGE_CONFIRMATION_TIMEOUT_MS * (CLOCKS_PER_SEC / 1000);
     while (!terminate) {
         guiStartFrame();
 
@@ -1892,4 +1911,30 @@ void guiManageCheats(void)
     }
 
     sfxPlay(SFX_CONFIRM);
+}
+
+
+void guiClearErrorMessage(void)
+{
+    // reset the original frame hook
+    frameCounter = 0;
+    guiSetFrameHook(&menuUpdateHook);
+}
+
+static void errorMessageHook()
+{
+    guiMsgBox(errorMessage, 0, NULL);
+    guiClearErrorMessage();
+}
+
+void guiSetErrorMessageWithCode(int strId, int error)
+{
+    snprintf(errorMessage, sizeof(errorMessage), _l(strId), error);
+    guiSetFrameHook(&errorMessageHook);
+}
+
+void guiSetErrorMessage(int strId)
+{
+    snprintf(errorMessage, sizeof(errorMessage), _l(strId));
+    guiSetFrameHook(&errorMessageHook);
 }

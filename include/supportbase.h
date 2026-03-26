@@ -64,6 +64,14 @@ struct vfs_fh
 };
 
 // File utility functions
+#ifdef PADEMU
+extern int gEnablePadEmu;
+extern int gPadEmuSettings;
+extern int gPadMacroSource;
+extern int gPadMacroSettings;
+extern int gPadEmuSource;
+#endif
+
 int isValidIsoName(char *name, int *pNameLen);
 int sbGetmcID(void);
 int sbGetFileSize(int fd);

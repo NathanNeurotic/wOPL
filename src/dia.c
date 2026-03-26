@@ -4,7 +4,7 @@
   Review OpenUsbLd README & LICENSE files for further details.
 */
 
-#include "include/opl.h"
+#include "include/common.h"
 #include "include/dia.h"
 #include "include/gui.h"
 #include "include/lang.h"
@@ -15,6 +15,7 @@
 #include "include/util.h"
 #include "include/sound.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 // UI spacing of the dialogues (pixels between consecutive items)
 #define UI_SPACING_H      10

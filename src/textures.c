@@ -1,4 +1,4 @@
-#include "include/opl.h"
+#include "include/common.h"
 #include "include/textures.h"
 #include "include/util.h"
 #include "include/ioman.h"
@@ -6,6 +6,7 @@
 #include <png.h>
 #include <fcntl.h>
 #include <malloc.h>
+#include <unistd.h>
 
 extern void *loading_0_png;
 extern void *loading_1_png;
