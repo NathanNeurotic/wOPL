@@ -376,10 +376,6 @@ static void ethInitSMB(void)
         sprintf(path, "%sLNG", ethPrefix);
         lngAddLanguages(path, "\\", ethGameList.mode);
 
-        if (gEnableArchivedArt) {
-            sprintf(path, "%sART\\art.tar", ethPrefix);
-            loadTarFile(path);
-        }
 
         sbCreateFolders(ethPrefix, 1);
     } else if (gPCShareName[0] || !(gNetworkStartup >= ERROR_ETH_SMB_OPENSHARE)) {
