@@ -11,8 +11,9 @@
 #include "include/ioman.h"
 #include "include/system.h"
 #include "include/extern_irx.h"
+#ifdef CHEAT
 #include "include/cheatman.h"
-#include "include/art_tar.h"
+#endif
 #include "modules/iopcore/common/cdvd_config.h"
 #include <stdio.h>
 #include <ps2smb.h>
@@ -787,7 +788,9 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
 {
     int i, compatmask;
     int EnablePS2Logo = 0;
+#ifdef CHEAT
     int result;
+#endif
     char filename[32], partname[256];
     base_game_info_t *game = &ethGames[id];
     struct cdvdman_settings_smb2 *settings_smb2_3;

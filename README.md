@@ -4,7 +4,8 @@
 
 Copyright 2013, Ifcaro & jimmikaelkael<br/>
 Copyright 2024, KrahJohilto</br>
-Copyright 2025-Present, Wolf3s, Ripto and chasebocamp<br/>
+Copyright 2025-2026 chasebochamp</br>
+Copyright 2025-Present, Wolf3s and Ripto<br/>
 Licensed under Academic Free License version 3.0
 Review the LICENSE file for further details.
 
@@ -21,13 +22,15 @@ the PS2 and PS3 units. This version uses features that at the moment are not mer
   <summary> <b> Changes in wOPL </b> </summary>
 <p>
 
-* Removal of UDPBD since there are not much users using this
-* Add a easter egg when booting on wOPL
-* Code cleanups/fixes and compiler warning fixes
-* Gui improvements
-* Art tar archive support
-* mmce support
+* Removal of UDPBD since there are not much users using this.
+* Add a easter egg when booting on wOPL.
+* Code cleanups/fixes and compiler warning fixes.
+* Gui improvements.
+* Art tar archive support(Only BDM, HDD and MMCE).
+* mmce support.
 * New theme renamed png files.
+* Added daf0x gamestar module.
+* Modular pademu, Play your games without selecting modules.
 </p>
 </details>
 

@@ -560,6 +560,7 @@ struct UIItem diaVMC[] = {
     // end of dialog
     {UI_TERMINATOR}};
 
+#ifdef GSM
 // Per-Game Game Settings > GSM Menu (--Bat--)
 struct UIItem diaGSConfig[] = {
     {UI_HEADER, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_GSM_SETTINGS}}},
@@ -602,7 +603,9 @@ struct UIItem diaGSConfig[] = {
 
     // end of dialog
     {UI_TERMINATOR}};
+#endif
 
+#ifdef CHEAT
 // Per Game Settings > Cheat Menu --Bat--
 struct UIItem diaCheatConfig[] = {
     {UI_HEADER, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_CHEAT_SETTINGS}}},
@@ -630,6 +633,7 @@ struct UIItem diaCheatConfig[] = {
 
     // end of dialog
     {UI_TERMINATOR}};
+#endif
 
 #ifdef PADEMU
 struct UIItem diaPadEmuConfig[] = {
@@ -645,11 +649,6 @@ struct UIItem diaPadEmuConfig[] = {
     {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {NULL, _STR_PADEMU_ENABLE}}},
     {UI_SPACER},
     {UI_BOOL, PADCFG_PADEMU_ENABLE, 1, 1, _STR_HINT_PADEMU_ENABLE, 0, 0, {.intvalue = {1, 1}}},
-    {UI_BREAK},
-
-    {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {NULL, _STR_PADEMU_MODE}}},
-    {UI_SPACER},
-    {UI_ENUM, PADCFG_PADEMU_MODE, 1, 1, _STR_HINT_PADEMU_MODE, 0, 0, {.intvalue = {1, 1}}},
     {UI_BREAK},
 
     {UI_LABEL, 0, 1, 1, -1, -50, 0, {.label = {NULL, _STR_MTAP_ENABLE}}},

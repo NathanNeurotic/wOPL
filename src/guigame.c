@@ -13,11 +13,12 @@
 #include "include/cheatman.h"
 #include "include/system.h"
 #include "include/guigame.h"
-#include "include/ds34common.h"
 #include "include/vmc_groups.h"
 #include "include/supportbase.h"
 #include <stdio.h>
+#ifdef GSM
 #include "include/pggsm.h"
+#endif
 
 #ifdef PADEMU
 #include <libds34bt.h>
@@ -32,14 +33,18 @@ static int dmaMode;
 static int compatMode;
 static int coreLoader;
 
+#ifdef GSM
 static int EnableGSM;
 static int GSMVMode;
 static int GSMXOffset;
 static int GSMYOffset;
 static int GSMFIELDFix;
+#endif
 
+#ifdef CHEAT
 static int EnableCheat;
 static int CheatMode;
+#endif
 
 static int forceGlobalOSDLanguage;
 
@@ -74,8 +79,12 @@ static char hexDiscID[15];
 static char configSource[128];
 
 // forward declarations.
+#ifdef GSM
 static void guiGameLoadGSMConfig(config_set_t *configSet, config_set_t *configGame);
+#endif
+#ifdef CHEAT
 static void guiGameLoadCheatsConfig(config_set_t *configSet, config_set_t *configGame);
+#endif
 #ifdef PADEMU
 static void guiGameLoadPadEmuConfig(config_set_t *configSet, config_set_t *configGame);
 static void guiGameLoadPadMacroConfig(config_set_t *configSet, config_set_t *configGame);
@@ -337,6 +346,7 @@ void guiGameShowVMCMenu(int id, item_list_t *support)
 }
 
 // GSM
+#ifdef GSM
 static void guiGameSetGSMSettingsState(void)
 {
     int previousSource = gGSMSource;
@@ -418,8 +428,10 @@ void guiGameShowGSConfig(void)
 
     diaExecuteDialog(diaGSConfig, -1, 1, &guiGameGSMUpdater);
 }
+#endif
 
 // CHEATS
+#ifdef CHEAT
 static void guiGameSetCheatSettingsState(void)
 {
     int previousSource = gCheatSource;
@@ -463,6 +475,7 @@ void guiGameShowCheatConfig(void)
 
     diaExecuteDialog(diaCheatConfig, -1, 1, &guiGameCheatUpdater);
 }
+#endif
 
 // PADEMU
 #ifdef PADEMU
@@ -495,6 +508,26 @@ static const char *button_names_enum[] = {
     "Cross", "Circle", "Square", "Triangle",
     "L3", "R3", "Start", "Select",
     NULL};
+
+// NOTE: struct member prefixed with "n" means it's active-low (i.e. value of 0 indicates button is pressed, value 1 is released)
+static enum DS2ButtonBitNumber {
+    DS2BtnBit_Select = 0,
+    DS2BtnBit_L3 = 1,
+    DS2BtnBit_R3 = 2,
+    DS2BtnBit_Start = 3,
+    DS2BtnBit_Up = 4,
+    DS2BtnBit_Right = 5,
+    DS2BtnBit_Down = 6,
+    DS2BtnBit_Left = 7,
+    DS2BtnBit_L2 = 8,
+    DS2BtnBit_R2 = 9,
+    DS2BtnBit_L1 = 10,
+    DS2BtnBit_R1 = 11,
+    DS2BtnBit_Triangle = 12,
+    DS2BtnBit_Circle = 13,
+    DS2BtnBit_Cross = 14,
+    DS2BtnBit_Square = 15,
+};
 
 static const char button_enum_to_bit_number[] = {
     BtnBit_Off, // Off
@@ -581,7 +614,7 @@ static char *ver_to_str(char *str, u8 ma, u16 mi)
 
 static int guiGamePadEmuUpdater(int modified)
 {
-    int PadEmuMode, PadPort, PadEmuVib, PadEmuPort, PadEmuMtap, PadEmuMtapPort, PadEmuWorkaround;
+    int PadPort, PadEmuVib, PadEmuPort, PadEmuMtap, PadEmuMtapPort, PadEmuWorkaround;
     static int oldPadPort;
     int previousSource = gPadEmuSource;
 
@@ -599,7 +632,6 @@ static int guiGamePadEmuUpdater(int modified)
     }
 
     diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_ENABLE, &EnablePadEmu);
-    diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_MODE, &PadEmuMode);
     diaGetInt(diaPadEmuConfig, PADCFG_PADPORT, &PadPort);
     diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, &PadEmuPort);
     diaGetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, &PadEmuVib);
@@ -611,22 +643,20 @@ static int guiGamePadEmuUpdater(int modified)
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_MTAP, EnablePadEmu);
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_MTAP_PORT, PadEmuMtap);
 
-    diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_MODE, EnablePadEmu);
-
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADPORT, EnablePadEmu);
     diaSetEnabled(diaPadEmuConfig, PADCFG_PADEMU_VIB, PadEmuPort & EnablePadEmu);
 
-    diaSetVisible(diaPadEmuConfig, PADCFG_USBDG_MAC, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_PAD_MAC, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_PAIR, (PadEmuMode == 1) & EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_USBDG_MAC, EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_PAD_MAC, EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_PAIR, EnablePadEmu);
 
-    diaSetVisible(diaPadEmuConfig, PADCFG_USBDG_MAC_STR, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_PAD_MAC_STR, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_PAIR_STR, (PadEmuMode == 1) & EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_USBDG_MAC_STR, EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_PAD_MAC_STR, EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_PAIR_STR, EnablePadEmu);
 
-    diaSetVisible(diaPadEmuConfig, PADCFG_BTINFO, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, (PadEmuMode == 1) & EnablePadEmu);
-    diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, (PadEmuMode == 1) & EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_BTINFO, EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND, EnablePadEmu);
+    diaSetVisible(diaPadEmuConfig, PADCFG_PADEMU_WORKAROUND_STR, EnablePadEmu);
 
     if (modified) {
         if (PadEmuMtap) {
@@ -651,44 +681,42 @@ static int guiGamePadEmuUpdater(int modified)
         }
     }
 
-    PadEmuSettings |= PadEmuMode | (PadEmuPort << (8 + PadPort)) | (PadEmuVib << (16 + PadPort)) | (PadEmuMtap << 24) | ((PadEmuMtapPort - 1) << 25) | (PadEmuWorkaround << 26);
-    PadEmuSettings &= (~(PadEmuMode ? 0 : 1) & ~(!PadEmuPort << (8 + PadPort)) & ~(!PadEmuVib << (16 + PadPort)) & ~(!PadEmuMtap << 24) & ~(!(PadEmuMtapPort - 1) << 25) & ~(!PadEmuWorkaround << 26));
+    PadEmuSettings |= (PadEmuPort << (8 + PadPort)) | (PadEmuVib << (16 + PadPort)) | (PadEmuMtap << 24) | ((PadEmuMtapPort - 1) << 25) | (PadEmuWorkaround << 26);
+    PadEmuSettings &= ~(!PadEmuPort << (8 + PadPort)) & ~(!PadEmuVib << (16 + PadPort)) & ~(!PadEmuMtap << 24) & ~(!(PadEmuMtapPort - 1) << 25) & ~(!PadEmuWorkaround << 26);
 
-    if (PadEmuMode == 1) {
-        if (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED) {
-            if (dg_discon) {
-                dgmacset = 0;
-                dg_discon = 0;
-            }
-            if (!dgmacset) {
-                if (ds34bt_get_bdaddr(dg_mac)) {
-                    dgmacset = 1;
-                    diaSetLabel(diaPadEmuConfig, PADCFG_USBDG_MAC, bdaddr_to_str(dg_mac, dg_str));
-                } else {
-                    dgmacset = 0;
-                }
-            }
-        } else {
-            dg_discon = 1;
+    if (ds34bt_get_status(0) & DS34BT_STATE_USB_CONFIGURED) {
+        if (dg_discon) {
+            dgmacset = 0;
+            dg_discon = 0;
         }
-
         if (!dgmacset) {
-            diaSetLabel(diaPadEmuConfig, PADCFG_USBDG_MAC, _l(_STR_NOT_CONNECTED));
-        }
-
-        if (ds34usb_get_status(0) & DS34USB_STATE_RUNNING) {
-            if (!ds3macset) {
-                if (ds34usb_get_bdaddr(0, ds3_mac)) {
-                    ds3macset = 1;
-                    diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, bdaddr_to_str(ds3_mac, ds3_str));
-                } else {
-                    ds3macset = 0;
-                }
+            if (ds34bt_get_bdaddr(dg_mac)) {
+                dgmacset = 1;
+                diaSetLabel(diaPadEmuConfig, PADCFG_USBDG_MAC, bdaddr_to_str(dg_mac, dg_str));
+            } else {
+                dgmacset = 0;
             }
-        } else {
-            diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, _l(_STR_NOT_CONNECTED));
-            ds3macset = 0;
         }
+    } else {
+        dg_discon = 1;
+    }
+
+    if (!dgmacset) {
+        diaSetLabel(diaPadEmuConfig, PADCFG_USBDG_MAC, _l(_STR_NOT_CONNECTED));
+    }
+
+    if (ds34usb_get_status(0) & DS34USB_STATE_RUNNING) {
+        if (!ds3macset) {
+            if (ds34usb_get_bdaddr(0, ds3_mac)) {
+                ds3macset = 1;
+                diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, bdaddr_to_str(ds3_mac, ds3_str));
+            } else {
+                ds3macset = 0;
+            }
+        }
+    } else {
+        diaSetLabel(diaPadEmuConfig, PADCFG_PAD_MAC, _l(_STR_NOT_CONNECTED));
+        ds3macset = 0;
     }
 
     return 0;
@@ -749,7 +777,6 @@ static int guiGamePadEmuInfoUpdater(int modified)
 void guiGameShowPadEmuConfig(int forceGlobal)
 {
     const char *settingsSource[] = {_l(_STR_GLOBAL_SETTINGS), _l(_STR_PERGAME_SETTINGS), NULL};
-    const char *PadEmuModes[] = {_l(_STR_DS34USB_MODE), _l(_STR_DS34BT_MODE), NULL};
 
     int PadEmuMtap, PadEmuMtapPort, i;
 
@@ -760,7 +787,6 @@ void guiGameShowPadEmuConfig(int forceGlobal)
         guiGameLoadPadEmuConfig(NULL, configGetByType(CONFIG_GAME));
 
     diaSetEnum(diaPadEmuConfig, PADCFG_PADEMU_SOURCE, settingsSource);
-    diaSetEnum(diaPadEmuConfig, PADCFG_PADEMU_MODE, PadEmuModes);
 
     PadEmuMtap = (PadEmuSettings >> 24) & 1;
     PadEmuMtapPort = ((PadEmuSettings >> 25) & 1) + 1;
@@ -1016,7 +1042,8 @@ int guiGameSaveConfig(config_set_t *configSet, item_list_t *support)
     else
         configRemoveKey(configSet, CONFIG_ITEM_CORE_LOADER);
 
-    /// GSM ///
+        /// GSM ///
+#ifdef GSM
     diaGetInt(diaGSConfig, GSMCFG_ENABLEGSM, &EnableGSM);
     diaGetInt(diaGSConfig, GSMCFG_GSMVMODE, &GSMVMode);
     diaGetInt(diaGSConfig, GSMCFG_GSMXOFFSET, &GSMXOffset);
@@ -1056,8 +1083,10 @@ int guiGameSaveConfig(config_set_t *configSet, item_list_t *support)
         configSetInt(configGame, CONFIG_ITEM_GSMYOFFSET, GSMYOffset);
         configSetInt(configGame, CONFIG_ITEM_GSMFIELDFIX, GSMFIELDFix);
     }
+#endif
 
     /// Cheats ///
+#ifdef CHEAT
     diaGetInt(diaCheatConfig, CHTCFG_CHEATSOURCE, &gCheatSource);
     diaGetInt(diaCheatConfig, CHTCFG_ENABLECHEAT, &EnableCheat);
     diaGetInt(diaCheatConfig, CHTCFG_CHEATMODE, &CheatMode);
@@ -1077,6 +1106,7 @@ int guiGameSaveConfig(config_set_t *configSet, item_list_t *support)
         configSetInt(configGame, CONFIG_ITEM_ENABLECHEAT, EnableCheat);
         configSetInt(configGame, CONFIG_ITEM_CHEATMODE, CheatMode);
     }
+#endif
 
 #ifdef PADEMU
     /// PADEMU ///
@@ -1110,15 +1140,19 @@ void guiGameRemoveGlobalSettings(config_set_t *configGame)
 {
     if (menuCheckParentalLock() == 0) {
         // Cheats
+#ifdef CHEAT
         configRemoveKey(configGame, CONFIG_ITEM_ENABLECHEAT);
         configRemoveKey(configGame, CONFIG_ITEM_CHEATMODE);
-
+#endif
         // GSM
+#ifdef GSM
         configRemoveKey(configGame, CONFIG_ITEM_ENABLEGSM);
         configRemoveKey(configGame, CONFIG_ITEM_GSMVMODE);
         configRemoveKey(configGame, CONFIG_ITEM_GSMXOFFSET);
         configRemoveKey(configGame, CONFIG_ITEM_GSMYOFFSET);
         configRemoveKey(configGame, CONFIG_ITEM_GSMFIELDFIX);
+#endif
+
         // OSD Language
         configRemoveKey(configGame, CONFIG_ITEM_OSD_SETTINGS_LANGID);
         configRemoveKey(configGame, CONFIG_ITEM_OSD_SETTINGS_TV_ASP);
@@ -1145,6 +1179,7 @@ void guiGameRemoveSettings(config_set_t *configSet)
         configRemoveKey(configSet, CONFIG_ITEM_DNAS);
         configRemoveKey(configSet, CONFIG_ITEM_ALTSTARTUP);
 
+#ifdef GSM
         // GSM
         configRemoveKey(configSet, CONFIG_ITEM_GSMSOURCE);
         configRemoveKey(configSet, CONFIG_ITEM_ENABLEGSM);
@@ -1152,11 +1187,14 @@ void guiGameRemoveSettings(config_set_t *configSet)
         configRemoveKey(configSet, CONFIG_ITEM_GSMXOFFSET);
         configRemoveKey(configSet, CONFIG_ITEM_GSMYOFFSET);
         configRemoveKey(configSet, CONFIG_ITEM_GSMFIELDFIX);
+#endif
 
+#ifdef CHEAT
         // Cheats
         configRemoveKey(configSet, CONFIG_ITEM_CHEATSSOURCE);
         configRemoveKey(configSet, CONFIG_ITEM_ENABLECHEAT);
         configRemoveKey(configSet, CONFIG_ITEM_CHEATMODE);
+#endif
 
         // OSD Language
         configRemoveKey(configSet, CONFIG_ITEM_OSD_SETTINGS_LANGID);
@@ -1187,6 +1225,7 @@ void guiGameTestSettings(int id, item_list_t *support, config_set_t *configSet)
     support->itemLaunch(support, id, configSet);
 }
 
+#ifdef GSM
 static void guiGameLoadGSMConfig(config_set_t *configSet, config_set_t *configGame)
 {
     EnableGSM = 0;
@@ -1226,7 +1265,9 @@ static void guiGameLoadGSMConfig(config_set_t *configSet, config_set_t *configGa
     diaSetInt(diaGSConfig, GSMCFG_GSMYOFFSET, GSMYOffset);
     diaSetInt(diaGSConfig, GSMCFG_GSMFIELDFIX, GSMFIELDFix);
 }
+#endif
 
+#ifdef CHEAT
 static void guiGameLoadCheatsConfig(config_set_t *configSet, config_set_t *configGame)
 {
     EnableCheat = 0;
@@ -1251,6 +1292,7 @@ static void guiGameLoadCheatsConfig(config_set_t *configSet, config_set_t *confi
     diaSetInt(diaCheatConfig, CHTCFG_ENABLECHEAT, EnableCheat);
     diaSetInt(diaCheatConfig, CHTCFG_CHEATMODE, CheatMode);
 }
+#endif
 
 #ifdef PADEMU
 static void guiGameLoadPadEmuConfig(config_set_t *configSet, config_set_t *configGame)
@@ -1280,9 +1322,7 @@ static void guiGameLoadPadEmuConfig(config_set_t *configSet, config_set_t *confi
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_SOURCE, gPadEmuSource);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_ENABLE, EnablePadEmu);
 
-    diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_MODE, PadEmuSettings & 0xFF);
     diaSetInt(diaPadEmuConfig, PADCFG_PADPORT, 0);
-    diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_PORT, (PadEmuSettings >> 8) & 1);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_VIB, (PadEmuSettings >> 16) & 1);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_MTAP, PadEmuMtap);
     diaSetInt(diaPadEmuConfig, PADCFG_PADEMU_MTAP_PORT, PadEmuMtapPort);
@@ -1470,10 +1510,12 @@ void guiGameLoadConfig(item_list_t *support, config_set_t *configSet)
 
     configGetInt(configSet, CONFIG_ITEM_CORE_LOADER, &coreLoader);
     diaSetInt(diaCompatConfig, COMPAT_LOADER, coreLoader);
-
+#ifdef GSM
     guiGameLoadGSMConfig(configSet, configGame);
-
+#endif
+#ifdef CHEAT
     guiGameLoadCheatsConfig(configSet, configGame);
+#endif
 #ifdef PADEMU
     guiGameLoadPadEmuConfig(configSet, configGame);
     guiGameLoadPadMacroConfig(configSet, configGame);

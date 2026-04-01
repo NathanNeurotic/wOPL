@@ -24,8 +24,12 @@
 #include "../ee_core/include/modules.h"
 #include "../ee_core/include/coreconfig.h"
 #include <osd_config.h>
+#ifdef GSM
 #include "include/pggsm.h"
+#endif
+#ifdef CHEAT
 #include "include/cheatman.h"
+#endif
 #include "include/xparam.h"
 #include "include/initializer.h"
 #include <stdio.h>
@@ -587,13 +591,8 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 
 #ifdef PADEMU
     if (gEnablePadEmu) {
-        if (gPadEmuSettings & 0xFF) {
-            irxptr_tab[modcount].info = size_bt_pademu_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_PADEMU);
-            irxptr_tab[modcount++].ptr = (void *)&bt_pademu_irx;
-        } else {
-            irxptr_tab[modcount].info = size_usb_pademu_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_PADEMU);
-            irxptr_tab[modcount++].ptr = (void *)&usb_pademu_irx;
-        }
+        irxptr_tab[modcount].info = size_pademu_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_PADEMU);
+        irxptr_tab[modcount++].ptr = (void *)&pademu_irx;
     }
 #endif
 
@@ -818,11 +817,15 @@ void sysPrintEECoreConfig(struct EECoreConfig_t *config)
 
     LOG("IP=%s NM=%s GW=%s mode: %d\n", config->g_ps2_ip, config->g_ps2_netmask, config->g_ps2_gateway, config->g_ps2_ETHOpMode);
 
+#ifdef CHEAT
     LOG("PS2RD Cheat Engine = %s\n", config->gCheatList == NULL ? "Disabled" : "Enabled");
+#endif
 
     LOG("EnforceLanguage = %s\n", config->enforceLanguage == 0 ? "Disabled" : "Enabled");
 
+#ifdef GSM
     LOG("GSM = %s\n", config->EnableGSMOp == 0 ? "Disabled" : "Enabled");
+#endif
 
     LOG("PADEMU = %s\n", config->EnablePadEmuOp == 0 ? "Disabled" : "Enabled");
 
@@ -853,7 +856,9 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     char ElfPath[32];
     char *argv[4];
     void *eeloadCopy, *initUserMemory;
+#ifdef GSM
     struct GsmConfig_t gsm_config;
+#endif
 
     ethGetNetConfig(local_ip_address, local_netmask, local_gateway);
 
@@ -954,17 +959,19 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     config->EnableDebug = gEnableDebug;
     config->HDDSpindown = gHDDSpindown;
     config->g_ps2_ETHOpMode = gETHOpMode;
-
+#ifdef CHEAT
     if (GetCheatsEnabled()) {
         set_cheats_list();
         config->gCheatList = GetCheatsList();
     } else
         config->gCheatList = NULL;
+#endif
 
     sprintf(config->g_ps2_ip, "%u.%u.%u.%u", local_ip_address[0], local_ip_address[1], local_ip_address[2], local_ip_address[3]);
     sprintf(config->g_ps2_netmask, "%u.%u.%u.%u", local_netmask[0], local_netmask[1], local_netmask[2], local_netmask[3]);
     sprintf(config->g_ps2_gateway, "%u.%u.%u.%u", local_gateway[0], local_gateway[1], local_gateway[2], local_gateway[3]);
 
+#ifdef GSM
     // GSM now.
     config->EnableGSMOp = GetGSMEnabled();
     if (config->EnableGSMOp) {
@@ -981,6 +988,7 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
         config->GsmConfig.kGsDxDyOffsetSupported = gsm_config.kGsDxDyOffsetSupported;
         config->GsmConfig.FIELD_fix = gsm_config.FIELD_fix;
     }
+#endif
 
 #ifdef PADEMU
     config->EnablePadEmuOp = gEnablePadEmu;

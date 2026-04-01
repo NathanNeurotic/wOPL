@@ -22,7 +22,7 @@ EXTRAVERSION = beta
 # You can adjust the variables in this section to meet your needs.
 # To enable a feature, set its variable's value to 1. To disable, change it to 0.
 # Do not COMMENT out the variables!!
-# You can also specify variables when executing make: "make RTL=1 IGS=1 PADEMU=1"
+# You can also specify variables when executing make: "make RTL=1 GSM=1 IGS=1 PADEMU=1 CHEAT=1"
 
 # Check if EXTRA_FEATURES is set, default to 0
 EXTRA_FEATURES ?= 0
@@ -31,10 +31,14 @@ EXTRA_FEATURES ?= 0
 #Enables/disables Right-To-Left (RTL) language support
 RTL ?= $(EXTRA_FEATURES)
 
+#Enables/disables Graphics Synthesizer Mode (GSM) selector
+GSM ?= 1
+
 #Enables/disables pad emulator
 PADEMU ?= 1
 
-UDPBD ?= 0
+#Enables/disables the cheat engine (PS2RD)
+CHEAT ?= 1
 
 #Enables/disables building of an edition of wOPL that will support the DTL-T10000 (SDK v2.3+)
 DTL_T10000 ?= 0
@@ -78,7 +82,7 @@ endif
 
 FRONTEND_OBJS = pad.o xparam.o fntsys.o renderman.o menusys.o OSDHistory.o system.o lang.o lang_internal.o config.o dialogs.o tetris.o \
 		dia.o ioman.o texcache.o themes.o supportbase.o bdmsupport.o ethsupport.o hddsupport.o iosupport.o initializer.o zso.o lz4.o \
-		appsupport.o mmcesupport.o favsupport.o gui.o guigame.o vmc_groups.o textures.o art_tar.o common.o main.o module.o atlas.o nbns.o gsm.o cheatman.o sound.o ps2cnf.o ../modules/network/usmb2/usmb2.o
+		appsupport.o mmcesupport.o favsupport.o gui.o guigame.o vmc_groups.o textures.o art_tar.o common.o main.o module.o atlas.o nbns.o sound.o ps2cnf.o ../modules/network/usmb2/usmb2.o
 
 IOP_OBJS =	iomanx.o filexio.o ps2fs.o usbd.o bdmevent.o \
 		bdm.o bdmfs_fatfs.o usbmass_bd.o usbmass_bd_single.o iLinkman.o IEEE1394_bd.o mx4sio_bd.o \
@@ -144,6 +148,22 @@ ifeq ($(RTL),1)
   EE_CFLAGS += -D__RTL
 endif
 
+ifeq ($(GSM),1)
+  EE_CFLAGS += -DGSM
+  EE_OBJS += gsm.o
+  GSM_FLAGS = GSM=1
+else
+  GSM_FLAGS = GSM=0
+endif
+
+ifeq ($(CHEAT),1)
+  FRONTEND_OBJS += cheatman.o
+  EE_CFLAGS += -DCHEAT
+  CHEAT_FLAGS = CHEAT=1
+else
+  CHEAT_FLAGS = CHEAT=0
+endif
+
 ifeq ($(DTL_T10000),1)
   EE_CFLAGS += -D_DTL_T10000
   EECORE_EXTRA_FLAGS += DTL_T10000=1
@@ -153,12 +173,12 @@ else
 endif
 
 ifeq ($(PADEMU),1)
-  IOP_OBJS += bt_pademu.o usb_pademu.o ds34usb.o ds34bt.o libds34usb.a libds34bt.a
+  IOP_OBJS += pademu.o ds34usb.o ds34bt.o libds34usb.a libds34bt.a
   EE_CFLAGS += -DPADEMU
   EE_INCS += -Imodules/ds34bt/ee -Imodules/ds34usb/ee
-  PADEMU_FLAGS = PADEMU=1
+  PADEMU_FLAGS = PADEMU=1 VMC=1
 else
-  PADEMU_FLAGS = PADEMU=0
+  PADEMU_FLAGS = PADEMU=0 VMC=0
 endif
 
 ifeq ($(DEBUG),1)
@@ -235,7 +255,7 @@ all: #download_smb2man download_usmb2 download_lng download_lwNBD languages
 	echo "Building Open PS2 Loader $(wOPL_VERSION)..."
 	echo "-Interface"
 ifneq ($(NOT_PACKED),1)
-	$(MAKE) $(EE_BIN_PACKED)
+	$(MAKE) $(EE_BIN_PACKED) 
 else
 	$(MAKE) $(EE_BIN)
 endif
@@ -333,8 +353,7 @@ clean:	download_lwNBD download_smb2man download_usmb2
 	echo " -ds34bt"
 	$(MAKE) -C modules/ds34bt clean
 	echo " -pademu"
-	$(MAKE) -C modules/pademu USE_BT=1 clean
-	$(MAKE) -C modules/pademu USE_USB=1 clean
+	$(MAKE) -C modules/pademu USE_BT=1 USE_USB=1 VMC=1 clean
 	echo "-pc tools"
 	$(MAKE) -C pc clean
 
@@ -396,7 +415,7 @@ $(EE_VPKD).ZIP: $(EE_VPKD).ELF DETAILED_CHANGELOG CREDITS LICENSE README.md
 
 ee_core/ee_core.elf: ee_core
 	echo "-EE core"
-	$(MAKE) $(PADEMU_FLAGS) $(EECORE_EXTRA_FLAGS) -C $<
+	$(MAKE) $(PADEMU_FLAGS) $(GSM_FLAGS) $(CHEAT_FLAGS) $(EECORE_EXTRA_FLAGS) -C $<
 
 $(EE_ASM_DIR)ee_core.c: ee_core/ee_core.elf | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ eecore_elf
@@ -575,16 +594,10 @@ modules/ds34usb/iop/ds34usb.irx: modules/ds34usb/iop
 $(EE_ASM_DIR)ds34usb.c: modules/ds34usb/iop/ds34usb.irx | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ $(*F)_irx
 
-modules/pademu/bt_pademu.irx: modules/pademu
-	$(MAKE) -C $< USE_BT=1
+modules/pademu/pademu.irx: modules/pademu
+	$(MAKE) -C $< USE_BT=1 USE_USB=1 VMC=1 all
 
-$(EE_ASM_DIR)bt_pademu.c: modules/pademu/bt_pademu.irx
-	$(BIN2C) $< $@ $(*F)_irx
-
-modules/pademu/usb_pademu.irx: modules/pademu
-	$(MAKE) -C $< USE_USB=1
-
-$(EE_ASM_DIR)usb_pademu.c: modules/pademu/usb_pademu.irx
+$(EE_ASM_DIR)pademu.c: modules/pademu/pademu.irx
 	$(BIN2C) $< $@ $(*F)_irx
 
 $(EE_ASM_DIR)bdm.c: $(PS2SDK)/iop/irx/bdm.irx | $(EE_ASM_DIR)
