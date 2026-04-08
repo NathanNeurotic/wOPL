@@ -14,6 +14,7 @@
 #ifdef CHEAT
 #include "include/cheatman.h"
 #endif
+#include "include/art_tar.h"
 #include "modules/iopcore/common/cdvd_config.h"
 #include <stdio.h>
 #include <ps2smb.h>
@@ -602,6 +603,11 @@ static int ethNeedsUpdate(item_list_t *itemList)
             result = 1;
         }
 
+        if (gEnableArchivedArt) {
+            sprintf(path, "%sART/art.tar", ethPrefix);
+            loadTarFile(path);
+        }
+
         if (!sbIsSameSize(ethPrefix, ethULSizePrev))
             result = 1;
     }
@@ -976,7 +982,7 @@ static int ethGetImage(item_list_t *itemList, char *folder, int isRelative, char
     char path[256];
     if (gEnableArchivedArt)
         snprintf(path, sizeof(path), "%s_%s", value, suffix);
-    if (isRelative)
+    else if (isRelative)
         snprintf(path, sizeof(path), "%s%s\\%s_%s", ethPrefix, folder, value, suffix);
     else
         snprintf(path, sizeof(path), "%s%s_%s", folder, value, suffix);

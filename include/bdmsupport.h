@@ -23,6 +23,14 @@ typedef struct
     unsigned char ForceRefresh;
 } bdm_device_data_t;
 
+#define MAX_BDM_DEVICES 5
+
+#define BDM_TYPE_UNKNOWN -1
+#define BDM_TYPE_USB     0
+#define BDM_TYPE_ILINK   1
+#define BDM_TYPE_SDC     2
+#define BDM_TYPE_ATA     3
+
 extern int gBDMStartMode;
 extern int bdmCacheSize;
 extern char gBDMPrefix[32];
@@ -43,8 +51,7 @@ void bdmInitSemaphore();
 void bdmEnumerateDevices();
 
 void bdmResolveLBA_UDMA(bdm_device_data_t *pDeviceData);
-int bdmWaitForDevice(int deviceId, u32 timeoutMs);
-int bdmHDDIsPresent();
+int bdmHDDIsPresent(u32 timeoutMs);
 
 void autoLaunchBDMGame(char *argv[]);
 

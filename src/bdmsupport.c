@@ -45,14 +45,6 @@ typedef struct
     vmc_spec_t specs; /* Card specifications */
 } bdm_vmc_infos_t;
 
-#define MAX_BDM_DEVICES 5
-
-#define BDM_TYPE_UNKNOWN -1
-#define BDM_TYPE_USB     0
-#define BDM_TYPE_ILINK   1
-#define BDM_TYPE_SDC     2
-#define BDM_TYPE_ATA     3
-
 static int iLinkModLoaded = 0;
 static int mx4sioModLoaded = 0;
 static int hddModLoaded = 0;
@@ -998,7 +990,8 @@ void autoLaunchBDMGame(char *argv[])
 
     bdmLaunchGame(NULL, -1, configSet);
 }
-int bdmWaitForDevice(int deviceId, u32 timeoutMs)
+
+static int bdmWaitForDevice(int deviceId, u32 timeoutMs)
 {
     const int RETRY_DELAY = 100;
     char path[16];
@@ -1025,9 +1018,87 @@ int bdmWaitForDevice(int deviceId, u32 timeoutMs)
     }
 }
 
-int bdmHDDIsPresent()
+static int bdmDeviceIsPresent(int deviceId)
 {
-    // the only thing that currently uses ata_device_identify is ATA_DEVCTL_GET_HIGHEST_UDMA_MODE, so this is the best method to check for presence via xhdd (for now anyways)
-    // ideally, we'd only have ata_device_identify
-    return fileXioDevctl("xhdd0:", ATA_DEVCTL_GET_HIGHEST_UDMA_MODE, NULL, 0, NULL, 0) >= 0;
+    char path[16];
+    sprintf(path, "mass%d:/", deviceId);
+    int dir = fileXioDopen(path);
+
+    if (dir >= 0) {
+        fileXioDclose(dir);
+        return 1; // ready
+    }
+
+    return 0;
+}
+
+static int bdmDeviceIsATA(int deviceId)
+{
+    char path[16];
+    bdm_device_data_t data;
+
+    sprintf(path, "mass%d:/", deviceId);
+    int dir = fileXioDopen(path);
+    if (dir < 0)
+        return 0;
+
+    fileXioIoctl2(dir, USBMASS_IOCTL_GET_DRIVERNAME, NULL, 0, &data.bdmDriver, sizeof(data.bdmDriver) - 1);
+    fileXioDclose(dir);
+
+    return (!strcmp(data.bdmDriver, "ata") && strlen(data.bdmDriver) == 3);
+}
+
+static int bdmGetATADeviceId()
+{
+    for (int i = 0; i < MAX_BDM_DEVICES; i++) {
+        if (bdmDeviceIsATA(i)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int bdmHDDIsPresent(u32 timeoutMs)
+{
+    int hdd_id = -1;
+    int timedout = 0;
+
+    if (!hddIsPresent())
+        return 0;
+
+    // 1. scan via normal methods first...
+    hdd_id = bdmGetATADeviceId();
+    if (hdd_id >= 0)
+        return 1;
+
+    // 2. try to scan as fast as possible if the previous scan fails...
+    hdd_id = 0;
+
+    for (int i = 0; i < MAX_BDM_DEVICES; i++) {
+        // find the first inaccessible device - this one should be the HDD once it's mounted (we don't have access to device data at this point yet!)
+        if (!bdmDeviceIsPresent(i)) {
+            hdd_id = i;
+            break;
+        }
+    }
+
+    if (bdmWaitForDevice(hdd_id, timeoutMs)) {
+        // double-check to see if this indeed is the HDD, and if it is, we can exit early without stalling any further
+        if (bdmDeviceIsATA(hdd_id)) {
+            return 1;
+        } else
+            LOG("bdmHDDIsPresent: device at id %d is not an ATA HDD...\n", hdd_id);
+    } else {
+        timedout = 1;
+        LOG("bdmHDDIsPresent: waiting for hdd at id %d timed out...\n", hdd_id);
+    }
+
+    // 3. last resort - time out (if needed) and scan again...
+    if (!timedout) {
+        // if we haven't timed out already, then we need to wait for the devices to wake up... wait for the timeout...
+        LOG("bdmHDDIsPresent: waiting for timeout before scanning again...\n", hdd_id);
+        DelayThread(timeoutMs * 1000);
+    }
+
+    return bdmGetATADeviceId() >= 0;
 }
