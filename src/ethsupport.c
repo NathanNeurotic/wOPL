@@ -134,9 +134,6 @@ static void ethSMBConnect(void)
 
         gSMB2 = smb2_init_context();
 
-        guiRenderTextScreen("Criacao do contexto smb2");
-
-
         // open tcp connection with the server / logon to SMB server
         if (gPCShareAddressIsNetBIOS) {
             if (nbnsFindName(gPCShareNBAddress, share_ip_address) != 0) {
@@ -144,9 +141,9 @@ static void ethSMBConnect(void)
                 return;
             }
 
-            snprintf(url, sizeof(url), "smb://%u.%u.%u.%u", share_ip_address[0], share_ip_address[1], share_ip_address[2], share_ip_address[3]); // Ip adress should be in backslash four times
+            snprintf(url, sizeof(url), "%u.%u.%u.%u", share_ip_address[0], share_ip_address[1], share_ip_address[2], share_ip_address[3]); // Ip adress should be in backslash four times
         } else {
-            snprintf(url, sizeof(url), "smb://%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
+            snprintf(url, sizeof(url), "%u.%u.%u.%u", pc_ip[0], pc_ip[1], pc_ip[2], pc_ip[3]);
         }
 
 
@@ -507,10 +504,8 @@ static void smbLoadModules(void)
     SignalSema(ethInitSemaID);
 
     if (ret == 0) {
-        if (gEnableSMB2 == 1) {
+        if (gEnableSMB2) {
             if (sysLoadModuleBuffer(&smb2man_irx, size_smb2man_irx, 0, NULL) >= 0) { //
-                // LOG("[USMB2]:\n"); // Figure out how to unload the usmb2 module for smb2man.
-                // sysLoadModuleBuffer(&usmb2_irx, size_usmb2_irx, 0, NULL);
                 LOG("[NBNS]:\n");
                 sysLoadModuleBuffer(&nbns_irx, size_nbns_irx, 0, NULL);
                 nbnsInit();
@@ -966,9 +961,9 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
         settings->common.zso_cache = smbCacheSize;
     }
     if (gEnableSMB2) {
-        sysLaunchLoaderElf(filename, "ETH_MODE", size_smb_cdvdman_irx, smb_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
+        sysLaunchLoaderElf(filename, "ETH_MODE", size_smb2_3_cdvdman_irx, smb_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
     } else {
-        sysLaunchLoaderElf(filename, "ETH_MODE", size_smb2_3_cdvdman_irx, smb2_3_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
+        sysLaunchLoaderElf(filename, "ETH_MODE", size_smb_cdvdman_irx, smb_cdvdman_irx, size_mcemu_irx, smb_mcemu_irx, EnablePS2Logo, compatmask);
     }
 }
 

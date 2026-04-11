@@ -418,6 +418,8 @@ void loadConfig()
                 sscanf(temp, "%d.%d.%d.%d", &ps2_gateway[0], &ps2_gateway[1], &ps2_gateway[2], &ps2_gateway[3]);
             if (configGetStr(configNet, CONFIG_NET_PS2_DNS, &temp))
                 sscanf(temp, "%d.%d.%d.%d", &ps2_dns[0], &ps2_dns[1], &ps2_dns[2], &ps2_dns[3]);
+            
+            configGetInt(configNet, CONFIG_NET_ENABLE_SMB2, &gEnableSMB2);
 
             configGetStrCopy(configNet, CONFIG_NET_NBD_DEFAULT_EXPORT, gExportName, sizeof(gExportName));
         }
@@ -587,6 +589,7 @@ static void saveConfig()
         configSetStr(configNet, CONFIG_NET_PS2_DNS, temp);
 
         configSetInt(configNet, CONFIG_NET_ETH_LINKM, gETHOpMode);
+        configSetInt(configNet, CONFIG_NET_ENABLE_SMB2, gEnableSMB2);
         configSetInt(configNet, CONFIG_NET_PS2_DHCP, ps2_ip_use_dhcp);
         configSetInt(configNet, CONFIG_NET_SMB_NBNS, gPCShareAddressIsNetBIOS);
         configSetStr(configNet, CONFIG_NET_SMB_NB_ADDR, gPCShareNBAddress);
