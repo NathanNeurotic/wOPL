@@ -79,9 +79,8 @@ enum ERROR_CODE {
 #define COMPAT_MODE_7 0x40 // Patch IOP buffer overrun (bug in the game) by Maximus32
 #define COMPAT_MODE_8 0x80 // Unused
 
-#define COMPAT_MODE_COUNT 7 // only count modes in use
-
-#define OPL_MOD_STORAGE 0x00097000 //(default) Address of the module storage region
+#define OPL_MOD_STORAGE    0x00097000 // (default) Address of the module storage region
+#define OPL_MOD_STORAGE_HI 0x01C00000 // Alternate address of the module storage region
 
 // minimal inactive frames for cover display, can be pretty low since it means no button is pressed :)
 #define MENU_MIN_INACTIVE_FRAMES 8

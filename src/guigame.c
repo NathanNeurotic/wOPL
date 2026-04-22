@@ -15,6 +15,7 @@
 #include "include/guigame.h"
 #include "include/vmc_groups.h"
 #include "include/supportbase.h"
+#include "include/modular_core.h"
 #include <stdio.h>
 #ifdef GSM
 #include "include/pggsm.h"
@@ -77,6 +78,9 @@ static char vmc1[32];
 static char vmc2[32];
 static char hexDiscID[15];
 static char configSource[128];
+
+static int compatModeCount;
+static int coreID;
 
 // forward declarations.
 #ifdef GSM
@@ -971,9 +975,44 @@ void guiGameSavePadMacroGlobalConfig(config_set_t *configGame)
 }
 #endif
 
+static int guiGameCompatUpdater(int modified)
+{
+    if (modified) {
+        int i;
+
+        diaGetInt(diaCompatConfig, COMPAT_MODULAR_CORE_VERSION, &coreID);
+        if (oplCoreHasExtraModes(coreID)) {
+            compatModeCount = 8;
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_8_STR, 1);
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 6, 1);
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_9_STR, 1);
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 7, 1);
+        } else {
+            compatModeCount = 6;
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_8_STR, 0);
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 6, 0);
+            diaSetInt(diaCompatConfig, COMPAT_MODE_BASE + 6, 0);
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_9_STR, 0);
+            diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 7, 0);
+            diaSetInt(diaCompatConfig, COMPAT_MODE_BASE + 7, 0);
+        }
+
+        compatMode = 0;
+        for (i = 0; i < compatModeCount; ++i) {
+            int mdpart;
+            diaGetInt(diaCompatConfig, COMPAT_MODE_BASE + i, &mdpart);
+            compatMode |= (mdpart ? 1 : 0) << i;
+        }
+    }
+
+    return 0;
+}
+
+
 void guiGameShowCompatConfig(int id, item_list_t *support, config_set_t *configSet)
 {
     int i;
+    compatModeCount = 6;
 
     const char *loaders[] = {"<OPL>", "Neutrino", NULL};
     diaSetEnum(diaCompatConfig, COMPAT_LOADER, loaders);
@@ -986,14 +1025,10 @@ void guiGameShowCompatConfig(int id, item_list_t *support, config_set_t *configS
         diaSetEnum(diaCompatConfig, COMPAT_DMA, dmaModes);
     }
 
-    int result = diaExecuteDialog(diaCompatConfig, -1, 1, NULL);
+    diaSetEnum(diaCompatConfig, COMPAT_MODULAR_CORE_VERSION, (const char **)oplGetCoreGuiList());
+
+    int result = diaExecuteDialog(diaCompatConfig, -1, 1, guiGameCompatUpdater);
     if (result) {
-        compatMode = 0;
-        for (i = 0; i < COMPAT_MODE_COUNT; ++i) {
-            int mdpart;
-            diaGetInt(diaCompatConfig, COMPAT_MODE_BASE + i, &mdpart);
-            compatMode |= (mdpart ? 1 : 0) << i;
-        }
 
         if (result == COMPAT_LOADFROMDISC) {
             if (sysGetDiscID(hexDiscID) >= 0)
@@ -1007,6 +1042,7 @@ void guiGameShowCompatConfig(int id, item_list_t *support, config_set_t *configS
         diaGetString(diaCompatConfig, COMPAT_GAMEID, hexid, sizeof(hexid));
         diaGetString(diaCompatConfig, COMPAT_ALTSTARTUP, altStartup, sizeof(altStartup));
     }
+    oplSetGuiCoreValue(coreID);
 }
 
 // sets variables without writing to users cfg file.. follow up with menuSaveConfig() to write
@@ -1017,11 +1053,16 @@ int guiGameSaveConfig(config_set_t *configSet, item_list_t *support)
     config_set_t *configGame = configGetByType(CONFIG_GAME);
 
     compatMode = 0;
-    for (i = 0; i < COMPAT_MODE_COUNT; ++i) {
+    for (i = 0; i < compatModeCount; ++i) {
         int mdpart;
         diaGetInt(diaCompatConfig, COMPAT_MODE_BASE + i, &mdpart);
         compatMode |= (mdpart ? 1 : 0) << i;
     }
+
+    if (compatMode != 0)
+        result = configSetInt(configSet, CONFIG_ITEM_COMPAT, compatMode);
+    else
+        configRemoveKey(configSet, CONFIG_ITEM_COMPAT);
 
     if (support->flags & MODE_FLAG_COMPAT_DMA) {
         diaGetInt(diaCompatConfig, COMPAT_DMA, &dmaMode);
@@ -1031,10 +1072,12 @@ int guiGameSaveConfig(config_set_t *configSet, item_list_t *support)
             configRemoveKey(configSet, CONFIG_ITEM_DMA);
     }
 
-    if (compatMode != 0)
-        result = configSetInt(configSet, CONFIG_ITEM_COMPAT, compatMode);
+    diaGetInt(diaCompatConfig, COMPAT_MODULAR_CORE_VERSION, &coreID);
+    if (coreID != 0)
+        result = configSetStr(configSet, CONFIG_ITEM_MODULAR_CORE_VERSION, oplGetCoreValue());
     else
-        configRemoveKey(configSet, CONFIG_ITEM_COMPAT);
+        configRemoveKey(configSet, CONFIG_ITEM_MODULAR_CORE_VERSION);
+
 
     diaGetInt(diaCompatConfig, COMPAT_LOADER, &coreLoader);
     if (coreLoader != 0)
@@ -1126,6 +1169,7 @@ int guiGameSaveConfig(config_set_t *configSet, item_list_t *support)
     else
         configRemoveKey(configSet, CONFIG_ITEM_ALTSTARTUP);
 
+
     /// VMC ///
     configSetVMC(configSet, vmc1, 0);
     configSetVMC(configSet, vmc2, 1);
@@ -1178,6 +1222,7 @@ void guiGameRemoveSettings(config_set_t *configSet)
         configRemoveKey(configSet, CONFIG_ITEM_COMPAT);
         configRemoveKey(configSet, CONFIG_ITEM_DNAS);
         configRemoveKey(configSet, CONFIG_ITEM_ALTSTARTUP);
+        configRemoveKey(configSet, CONFIG_ITEM_MODULAR_CORE_VERSION);
 
 #ifdef GSM
         // GSM
@@ -1503,9 +1548,33 @@ void guiGameLoadConfig(item_list_t *support, config_set_t *configSet)
     } else
         diaSetInt(diaCompatConfig, COMPAT_DMA, 0);
 
+    const char *temp;
+    coreID = 0;
+    if (configGetStr(configSet, CONFIG_ITEM_MODULAR_CORE_VERSION, &temp))
+        coreID = oplFindCoreGuiID(temp);
+
+    oplSetGuiCoreValue(coreID);
+    diaSetInt(diaCompatConfig, COMPAT_MODULAR_CORE_VERSION, coreID);
+
+    if (oplCoreHasExtraModes(coreID)) {
+        compatModeCount = 8;
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_8_STR, 1);
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 6, 1);
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_9_STR, 1);
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 7, 1);
+    } else {
+        compatModeCount = 6;
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_8_STR, 0);
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 6, 0);
+        diaSetInt(diaCompatConfig, COMPAT_MODE_BASE + 6, 0);
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_9_STR, 0);
+        diaSetVisible(diaCompatConfig, COMPAT_MODE_BASE + 7, 0);
+        diaSetInt(diaCompatConfig, COMPAT_MODE_BASE + 7, 0);
+    }
+
     compatMode = 0;
     configGetInt(configSet, CONFIG_ITEM_COMPAT, &compatMode);
-    for (i = 0; i < COMPAT_MODE_COUNT; ++i)
+    for (i = 0; i < compatModeCount; ++i)
         diaSetInt(diaCompatConfig, COMPAT_MODE_BASE + i, (compatMode & (1 << i)) > 0 ? 1 : 0);
 
     configGetInt(configSet, CONFIG_ITEM_CORE_LOADER, &coreLoader);

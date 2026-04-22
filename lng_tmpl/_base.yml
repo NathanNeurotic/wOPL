@@ -720,3 +720,15 @@ gui_strings:
   string: Use timeout alarms
 - label: HINT_MMCE_USE_ALARMS
   string: OFF may help performance but can cause MMCE timeouts to result in freezes
+- label: COMPAT_MODES
+  string: Compatibility Modes
+- label: CORE_SELECT
+  string: Core Version
+- label: HINT_MODE8
+  string: High Module Storage
+- label: HINT_MODE9
+  string: Hide DEV9 Module
+- label: MODE8
+  string: Mode 8
+- label: MODE9
+  string: Mode 9

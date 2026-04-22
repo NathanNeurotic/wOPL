@@ -16,6 +16,7 @@
 #include "include/art_tar.h"
 #include "modules/iopcore/common/cdvd_config.h"
 #include "include/module.h"
+#include "include/modular_core.h"
 #include "include/initializer.h"
 #include <fcntl.h>
 #include <stdlib.h>
@@ -285,11 +286,20 @@ static int bdmNeedsUpdate(item_list_t *itemList)
         loadTarFile(path);
     }
 
+    sprintf(path, "%sCORES", pDeviceData->bdmPrefix);
+    oplAddCores(path, "/");
+
     // update Languages
     if (!pDeviceData->LanguagesLoaded) {
         sprintf(path, "%sLNG", pDeviceData->bdmPrefix);
         if (lngAddLanguages(path, "/", itemList->mode) > 0)
             pDeviceData->LanguagesLoaded = 1;
+    }
+
+    if (!pDeviceData->CoresLoaded) {
+        sprintf(path, "%sCORES", pDeviceData->bdmPrefix);
+        if (oplAddCores(path, "/") > 0)
+            pDeviceData->CoresLoaded = 1;
     }
 
     sbCreateFolders(pDeviceData->bdmPrefix, 1);
@@ -375,6 +385,14 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
 
     bdm_device_data_t *pDeviceData = NULL;
 
+    const char *temp;
+    int coreID = 0;
+    if (configGetStr(configSet, CONFIG_ITEM_MODULAR_CORE_VERSION, &temp))
+        coreID = oplFindCoreGuiID(temp);
+
+    oplSetGuiCoreValue(coreID);
+    oplGetCoreFiles(coreID, BDM_MODE);
+
     if (gAutoLaunchBDMGame == NULL) {
         pDeviceData = (bdm_device_data_t *)itemList->priv;
         game = &pDeviceData->bdmGames[id];
@@ -387,6 +405,8 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
     int vmc_id, size_mcemu_irx = 0;
     bdm_vmc_infos_t bdm_vmc_infos;
     vmc_superblock_t vmc_superblock;
+    void **mcemu_irx = coreFile[BDM_MCEMU_IRX].data;
+    int mcirx_size = coreFile[BDM_MCEMU_IRX].size;
 
     for (vmc_id = 0; vmc_id < 2; vmc_id++) {
         memset(&bdm_vmc_infos, 0, sizeof(bdm_vmc_infos_t));
@@ -447,11 +467,11 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
         } else
             LOG("VMC error\n");
 
-        for (i = 0; i < size_bdm_mcemu_irx; i++) {
-            if (((u32 *)&bdm_mcemu_irx)[i] == (0xC0DEFAC0 + vmc_id)) {
+        for (i = 0; i < mcirx_size; i++) {
+            if (((u32 *)mcemu_irx)[i] == (0xC0DEFAC0 + vmc_id)) {
                 if (bdm_vmc_infos.active)
-                    size_mcemu_irx = size_bdm_mcemu_irx;
-                memcpy(&((u32 *)&bdm_mcemu_irx)[i], &bdm_vmc_infos, sizeof(bdm_vmc_infos_t));
+                    size_mcemu_irx = mcirx_size;
+                memcpy(&((u32 *)mcemu_irx)[i], &bdm_vmc_infos, sizeof(bdm_vmc_infos_t));
                 break;
             }
         }
@@ -460,11 +480,12 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
     void *irx = NULL;
     int irx_size = 0;
     if (!strcmp(pDeviceData->bdmDriver, "ata") && strlen(pDeviceData->bdmDriver) == 3) {
-        irx = &bdm_ata_cdvdman_irx;
-        irx_size = size_bdm_ata_cdvdman_irx;
+        irx = coreFile[BDM_ATA_CDVDMAN_IRX].data;
+        irx_size = coreFile[BDM_ATA_CDVDMAN_IRX].size;
     } else {
-        irx = &bdm_cdvdman_irx;
-        irx_size = size_bdm_cdvdman_irx;
+        irx = coreFile[BDM_CDVDMAN_IRX].data;
+        irx_size = coreFile[BDM_CDVDMAN_IRX].size;
+        ;
     }
 
     compatmask = sbPrepare(game, configSet, irx_size, irx, &index);
@@ -623,23 +644,27 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
         return;
     }
 
+    char *modeStr = "";
+
     if (!strcmp(bdmCurrentDriver, "usb")) {
         settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_USBD;
         if (settings->bdDeviceId == 0)
-            sysLaunchLoaderElf(filename, "BDM_USB_MODE0", irx_size, irx, size_mcemu_irx, bdm_mcemu_irx, EnablePS2Logo, compatmask);
+            modeStr = "BDM_USB_MODE0";
         else
-            sysLaunchLoaderElf(filename, "BDM_USB_MODE1", irx_size, irx, size_mcemu_irx, bdm_mcemu_irx, EnablePS2Logo, compatmask);
+            modeStr = "BDM_USB_MODE1";
     } else if (!strcmp(bdmCurrentDriver, "sd") && strlen(bdmCurrentDriver) == 2) {
         settings->common.fakemodule_flags |= 0 /* TODO! fake ilinkman ? */;
-        sysLaunchLoaderElf(filename, "BDM_ILK_MODE", irx_size, irx, size_mcemu_irx, bdm_mcemu_irx, EnablePS2Logo, compatmask);
+        modeStr = "BDM_ILK_MODE";
     } else if (!strcmp(bdmCurrentDriver, "sdc") && strlen(bdmCurrentDriver) == 3) {
         settings->common.fakemodule_flags |= 0;
-        sysLaunchLoaderElf(filename, "BDM_M4S_MODE", irx_size, irx, size_mcemu_irx, bdm_mcemu_irx, EnablePS2Logo, compatmask);
+        modeStr = "BDM_M4S_MODE";
     } else if (!strcmp(bdmCurrentDriver, "ata") && strlen(bdmCurrentDriver) == 3) {
         settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_DEV9;
         settings->common.fakemodule_flags |= FAKE_MODULE_FLAG_ATAD;
-        sysLaunchLoaderElf(filename, "BDM_ATA_MODE", irx_size, irx, size_mcemu_irx, bdm_mcemu_irx, EnablePS2Logo, compatmask);
+        modeStr = "BDM_ATA_MODE";
     }
+
+    sysLaunchLoaderElf(filename, modeStr, irx_size, irx, size_mcemu_irx, mcemu_irx, EnablePS2Logo, compatmask);
 }
 
 static config_set_t *bdmGetConfig(item_list_t *itemList, int id)
