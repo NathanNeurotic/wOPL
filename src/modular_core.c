@@ -9,8 +9,8 @@
 
 #define MAX_CORES 10
 
-extern void *eecore_elf;
-extern int size_eecore_elf;
+extern unsigned char eecore_elf[];
+extern unsigned int size_eecore_elf;
 
 extern unsigned char eesync_irx[];
 extern unsigned int size_eesync_irx;
@@ -185,6 +185,8 @@ static void oplSetCoreDefaults(void)
     coreFile[USBD_IRX].size = size_usbd_irx;
     coreFile[USBMASS_BD_IRX].data = (void *)&usbmass_bd_irx;
     coreFile[USBMASS_BD_IRX].size = size_usbmass_bd_irx;
+    coreFile[USBMASS_BD_SINGLE_IRX].data = (void *)&usbmass_bd_irx;
+    coreFile[USBMASS_BD_SINGLE_IRX].size = size_usbmass_bd_irx;
     coreFile[BDM_CDVDMAN_IRX].data = (void *)&bdm_cdvdman_irx;
     coreFile[BDM_CDVDMAN_IRX].size = size_bdm_cdvdman_irx;
     coreFile[BDM_ATA_CDVDMAN_IRX].data = (void *)&bdm_ata_cdvdman_irx;
@@ -267,10 +269,10 @@ void oplGetCoreFiles(int coreID, int mode)
         "SMSTCPIP.irx",
         "smb_cdvdman.irx",
         "smb_mcemu.irx",
-        "bt_pademu.irx",
-        "usb_pademu.irx",
+        "pademu.irx",
         "usbd.irx",
         "usbmass_bd.irx",
+        "usbmass_bd_single.irx"
         "bdm_cdvdman.irx",
         "bdm_mcemu.irx",
         "iLinkman.irx",

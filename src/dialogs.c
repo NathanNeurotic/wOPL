@@ -481,13 +481,16 @@ struct UIItem diaCompatConfig[] = {
     {UI_SPACER},
     {UI_BOOL, COMPAT_MODE_BASE + 6, 1, 1, _STR_HINT_MODE7, -10, 0, {.intvalue = {0, 0}}},
     {UI_SPACER},
+    {UI_BREAK},
+
     {UI_LABEL, COMPAT_MODE_8_STR, 1, 1, -1, 0, 0, {.label = {NULL, _STR_MODE8}}},
     {UI_SPACER},
     {UI_BOOL, COMPAT_MODE_BASE + 7, 1, 1, _STR_HINT_MODE8, -10, 0, {.intvalue = {0, 0}}},
+    {UI_SPACER},
     {UI_LABEL, COMPAT_MODE_9_STR, 1, 1, -1, 0, 0, {.label = {NULL, _STR_MODE9}}},
     {UI_SPACER},
-    {UI_BOOL, COMPAT_MODE_BASE + 6, 1, 1, _STR_HINT_MODE9, -10, 0, {.intvalue = {0, 0}}},
-    {UI_SPACER},
+    {UI_BOOL, COMPAT_MODE_BASE + 8, 1, 1, _STR_HINT_MODE9, -10, 0, {.intvalue = {0, 0}}},
+
     {UI_BREAK},
 
     {UI_SPLITTER},

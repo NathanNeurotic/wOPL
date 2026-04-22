@@ -15,6 +15,7 @@
 #include "include/art_tar.h"
 #include "modules/iopcore/common/cdvd_config.h"
 #include "include/mcemu.h"
+#include "include/modular_core.h"
 #include <malloc.h>
 #include <dirent.h>
 #include <libcdvd.h>
@@ -508,6 +509,9 @@ static void hddInitModules(void)
     sprintf(path, "%sLNG", gHDDPrefix);
     lngAddLanguages(path, "/", hddGameList.mode);
 
+    sprintf(path, "%sCORES", gHDDPrefix);
+    oplAddCores(path, "/");
+
     if (gEnableArchivedArt) {
         sprintf(path, "%sART/art.tar", gHDDPrefix);
         loadTarFile(path);
@@ -930,6 +934,14 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
     else
         game = gAutoLaunchGame;
 
+    const char *temp;
+    int coreID = 0;
+    if (configGetStr(configSet, CONFIG_ITEM_MODULAR_CORE_VERSION, &temp))
+        coreID = oplFindCoreGuiID(temp);
+
+    oplSetGuiCoreValue(coreID);
+    oplGetCoreFiles(coreID, HDD_MODE);
+
     apa_sub_t parts[APA_MAXSUB + 1];
     char vmc_name[2][32];
     int part_valid = 0, size_mcemu_irx = 0, nparts;
@@ -938,6 +950,9 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
 
     configGetVMC(configSet, vmc_name[0], sizeof(vmc_name[0]), 0);
     configGetVMC(configSet, vmc_name[1], sizeof(vmc_name[1]), 1);
+
+    void **mcemu_irx = coreFile[HDD_MCEMU_IRX].data;
+    int mcirx_size = coreFile[HDD_MCEMU_IRX].size;
 
     if (vmc_name[0][0] || vmc_name[1][0]) {
         nparts = hddGetPartitionInfo(gOPLPart, parts);
@@ -1001,11 +1016,11 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
                         LOG("VMC error\n");
                 }
 
-                for (i = 0; i < size_hdd_mcemu_irx; i++) {
-                    if (((u32 *)&hdd_mcemu_irx)[i] == (0xC0DEFAC0 + vmc_id)) {
+                for (i = 0; i < mcirx_size; i++) {
+                    if (((u32 *)mcemu_irx)[i] == (0xC0DEFAC0 + vmc_id)) {
                         if (hdd_vmc_infos.active)
-                            size_mcemu_irx = size_hdd_mcemu_irx;
-                        memcpy(&((u32 *)&hdd_mcemu_irx)[i], &hdd_vmc_infos, sizeof(hdd_vmc_infos_t));
+                            size_mcemu_irx = mcirx_size;
+                        memcpy(&((u32 *)mcemu_irx)[i], &hdd_vmc_infos, sizeof(hdd_vmc_infos_t));
                         break;
                     }
                 }
@@ -1035,14 +1050,14 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
     hddSetIdleTimeout(gHDDSpindown * 12);
 
     if (hddHDProKitDetected) {
-        size_irx = size_hdd_hdpro_cdvdman_irx;
-        irx = &hdd_hdpro_cdvdman_irx;
+        size_irx = coreFile[HDD_HDPRO_CDVDMAN_IRX].size;
+        irx = coreFile[HDD_HDPRO_CDVDMAN_IRX].data;
     } else if (hddCheckGameStar()) {
         size_irx = size_hdd_gamestar_cdvdman_irx;
         irx = &hdd_gamestar_cdvdman_irx;
     } else {
-        size_irx = size_hdd_cdvdman_irx;
-        irx = &hdd_cdvdman_irx;
+        size_irx = coreFile[HDD_CDVDMAN_IRX].size;
+        irx = coreFile[HDD_CDVDMAN_IRX].data;
     }
 
     sbPrepare(NULL, configSet, size_irx, irx, &i);

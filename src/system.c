@@ -32,6 +32,7 @@
 #endif
 #include "include/xparam.h"
 #include "include/initializer.h"
+#include "include/modular_core.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -63,14 +64,8 @@ typedef struct
     int VMC_card_slot;
 } createVMCparam_t;
 
-extern unsigned char eecore_elf[];
-extern unsigned int size_eecore_elf;
-
 extern unsigned char IOPRP_img[];
 extern unsigned int size_IOPRP_img;
-
-extern unsigned char eesync_irx[];
-extern unsigned int size_eesync_irx;
 
 #define MAX_MODULES 64
 static void *g_sysLoadedModBuffer[MAX_MODULES];
@@ -477,7 +472,7 @@ static void *GetModStorageLocation(const char *startup, unsigned compatFlags)
         }
     }
 
-    return ((void *)OPL_MOD_STORAGE);
+    return ((void *)((compatFlags & COMPAT_MODE_7) ? OPL_MOD_STORAGE_HI : OPL_MOD_STORAGE));
 }
 
 static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, unsigned int modules, void *ModuleStorage, int size_cdvdman_irx, void **cdvdman_irx, int size_mcemu_irx, void **mcemu_irx)
@@ -508,7 +503,7 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 
     irxtable = (irxtab_t *)ModuleStorage;
     irxptr_tab = (irxptr_t *)((unsigned char *)irxtable + sizeof(irxtab_t));
-    size_ioprp_image = size_IOPRP_img + size_cdvdman_irx + size_cdvdfsv_irx + size_eesync_irx + 256;
+    size_ioprp_image = size_IOPRP_img + size_cdvdman_irx + coreFile[CDVDFSV_IRX].size + coreFile[EESYNC_IRX].size + 256;
     LOG("IOPRP image size calculated: %d\n", size_ioprp_image);
     ioprp_image = malloc(size_ioprp_image);
     size_ioprp_image = patch_IOPRP_image(ioprp_image, cdvdman_irx, size_cdvdman_irx);
@@ -516,12 +511,12 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 
     modcount = 0;
     // Basic modules
-    irxptr_tab[modcount].info = size_udnl_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_UDNL);
-    irxptr_tab[modcount++].ptr = (void *)&udnl_irx;
+    irxptr_tab[modcount].info = coreFile[UDNL_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_UDNL);
+    irxptr_tab[modcount++].ptr = coreFile[UDNL_IRX].data;
     irxptr_tab[modcount].info = size_ioprp_image | SET_OPL_MOD_ID(OPL_MODULE_ID_IOPRP);
     irxptr_tab[modcount++].ptr = ioprp_image;
-    irxptr_tab[modcount].info = size_imgdrv_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_IMGDRV);
-    irxptr_tab[modcount++].ptr = (void *)&imgdrv_irx;
+    irxptr_tab[modcount].info = coreFile[IMGDRV_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_IMGDRV);
+    irxptr_tab[modcount++].ptr = coreFile[IMGDRV_IRX].data;
     irxptr_tab[modcount].info = size_resetspu_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_RESETSPU);
     irxptr_tab[modcount++].ptr = (void *)&resetspu_irx;
 
@@ -540,37 +535,37 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
 #define PADEMU_ARG
 #endif
     if ((modules & CORE_IRX_USB) PADEMU_ARG) {
-        irxptr_tab[modcount].info = size_usbd_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_USBD);
-        irxptr_tab[modcount++].ptr = (void *)&usbd_irx;
+        irxptr_tab[modcount].info = coreFile[USBD_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_USBD);
+        irxptr_tab[modcount++].ptr = coreFile[USBD_IRX].data;
     }
-    if (modules & CORE_IRX_USB) {
+    if ((modules & CORE_IRX_USB) && oplCoreHasBDM()) {
         if (devId) {
-            irxptr_tab[modcount].info = size_usbmass_bd_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_USBMASSBD);
-            irxptr_tab[modcount++].ptr = (void *)&usbmass_bd_irx;
+            irxptr_tab[modcount].info = coreFile[USBMASS_BD_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_USBMASSBD);
+            irxptr_tab[modcount++].ptr = coreFile[USBMASS_BD_IRX].data;
         } else {
-            irxptr_tab[modcount].info = size_usbmass_bd_single_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_USBMASSBD);
-            irxptr_tab[modcount++].ptr = (void *)&usbmass_bd_single_irx;
+            irxptr_tab[modcount].info = coreFile[USBMASS_BD_SINGLE_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_USBMASSBD);
+            irxptr_tab[modcount++].ptr = coreFile[USBMASS_BD_SINGLE_IRX].data;
         }
     }
     if (modules & CORE_IRX_ILINK) {
-        irxptr_tab[modcount].info = size_iLinkman_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_ILINK);
-        irxptr_tab[modcount++].ptr = (void *)&iLinkman_irx;
-        irxptr_tab[modcount].info = size_IEEE1394_bd_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_ILINKBD);
-        irxptr_tab[modcount++].ptr = (void *)&IEEE1394_bd_irx;
+        irxptr_tab[modcount].info = coreFile[ILINKMAN_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_ILINK);
+        irxptr_tab[modcount++].ptr = coreFile[ILINKMAN_IRX].data;
+        irxptr_tab[modcount].info = coreFile[ILINK_BD_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_ILINKBD);
+        irxptr_tab[modcount++].ptr = coreFile[ILINK_BD_IRX].data;
     }
     if (modules & CORE_IRX_MX4SIO) {
-        irxptr_tab[modcount].info = size_mx4sio_bd_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_MX4SIOBD);
-        irxptr_tab[modcount++].ptr = (void *)&mx4sio_bd_irx;
+        irxptr_tab[modcount].info = coreFile[MX4SIO_BD_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_MX4SIOBD);
+        irxptr_tab[modcount++].ptr = coreFile[MX4SIO_BD_IRX].data;
     }
     if (modules & CORE_IRX_ETH) {
-        irxptr_tab[modcount].info = size_smap_ingame_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_SMAP);
-        irxptr_tab[modcount++].ptr = (void *)&smap_ingame_irx;
-        irxptr_tab[modcount].info = size_ingame_smstcpip_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_SMSTCPIP);
-        irxptr_tab[modcount++].ptr = (void *)&ingame_smstcpip_irx;
+        irxptr_tab[modcount].info = coreFile[SMAP_INGAME_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_SMAP);
+        irxptr_tab[modcount++].ptr = coreFile[SMAP_INGAME_IRX].data;
+        irxptr_tab[modcount].info = coreFile[SMSTCPIP_INGAME_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_SMSTCPIP);
+        irxptr_tab[modcount++].ptr = coreFile[SMSTCPIP_INGAME_IRX].data;
     }
     if (modules & CORE_IRX_SMB) {
-        irxptr_tab[modcount].info = size_smbinit_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_SMBINIT);
-        irxptr_tab[modcount++].ptr = (void *)&smbinit_irx;
+        irxptr_tab[modcount].info = coreFile[SMBINIT_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_SMBINIT);
+        irxptr_tab[modcount++].ptr = coreFile[SMBINIT_IRX].data;
     }
 
     if (modules & CORE_IRX_VMC) {
@@ -584,9 +579,9 @@ static unsigned int sendIrxKernelRAM(const char *startup, const char *mode_str, 
     }
 
 #ifdef PADEMU
-    if (gEnablePadEmu) {
-        irxptr_tab[modcount].info = size_pademu_irx | SET_OPL_MOD_ID(OPL_MODULE_ID_PADEMU);
-        irxptr_tab[modcount++].ptr = (void *)&pademu_irx;
+    if (oplCoreHasPademu() && gEnablePadEmu) {
+        irxptr_tab[modcount].info = coreFile[PADEMU_IRX].size | SET_OPL_MOD_ID(OPL_MODULE_ID_PADEMU);
+        irxptr_tab[modcount++].ptr = coreFile[PADEMU_IRX].data;
     }
 #endif
 
@@ -895,7 +890,7 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     ModuleStorageEnd = (void *)((u8 *)ModuleStorage + ModuleStorageSize);
 
     // NB: LOADER.ELF is embedded
-    boot_elf = (u8 *)&eecore_elf;
+    boot_elf = (u8 *)coreFile[EE_CORE_ELF].data;
     eh = (elf_header_t *)boot_elf;
     eph = (elf_pheader_t *)(boot_elf + eh->phoff);
 
@@ -924,14 +919,21 @@ void sysLaunchLoaderElf(const char *filename, const char *mode_str, int size_cdv
     }
 
     struct EECoreConfig_t *config = NULL;
-    u32 *core_ptr = (u32 *)&eecore_elf;
+    u32 *core_ptr = (u32 *)coreFile[EE_CORE_ELF].data;
 
-    for (i = 0; i < size_eecore_elf / 4; i++) {
+    for (i = 0; i < coreFile[EE_CORE_ELF].size / 4; i++) {
         if (core_ptr[0] == EE_CORE_MAGIC_0 && core_ptr[1] == EE_CORE_MAGIC_1) {
             config = (struct EECoreConfig_t *)core_ptr;
             break;
         }
         core_ptr++;
+    }
+
+    for (i = 0; i < CORE_FILE_COUNT; i++) {
+        if ((coreFile[i].data != NULL) && (coreFile[i].builtin == 0)) {
+            free(coreFile[i].data);
+            coreFile[i].data = NULL;
+        }
     }
 
     if (config == NULL) { // Should not happen, but...
