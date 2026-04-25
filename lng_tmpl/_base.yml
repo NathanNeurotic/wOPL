@@ -569,7 +569,7 @@ gui_strings:
 - label: INFO_DESCRIPTION
   string: Description
 - label: BLOCKDEVICE_SETTINGS
-  string: BDM Devices
+  string: USB/MX4SIO/iLink/HDD (ATA) Devices
 - label: CONTROLLER_SETTINGS
   string: Controller Settings
 - label: HINT_BDM_START
